@@ -1,0 +1,3010 @@
+'use strict';
+
+const {
+  dialogflow,
+  Suggestions,
+  Image,
+  Confirmation,
+  UpdatePermission,
+  RegisterUpdate
+} = require('actions-on-google');
+
+// Import the firebase-functions package for deployment.
+const functions = require('firebase-functions');
+
+// Instantiate the Dialogflow client.
+const app = dialogflow({debug: true});
+
+
+var tipChartBasic = [
+ /* 1*/ [],   //not really possible
+ /* 2*/ [],   //ace, ace in pair chart
+ /* 3*/ [],   //one of the aces would count as 11 so can't get this low
+ /* 4*/ ['H', 'H', 'H', 'H', 'H', 'H', 'H', 'H', 'H', 'H'], //pair of twos, see pait chart instead
+ /* 5*/ ['H', 'H', 'H', 'H', 'H', 'H', 'H', 'H', 'H', 'H'],
+ /* 6*/ ['H', 'H', 'H', 'H', 'H', 'H', 'H', 'H', 'H', 'H'],
+ /* 7*/ ['H', 'H', 'H', 'H', 'H', 'H', 'H', 'H', 'H', 'H'],
+ /* 8*/ ['H', 'H', 'H', 'H', 'D', 'D', 'H', 'H', 'H', 'H'],
+ /* 9*/ ['D', 'D', 'D', 'D', 'D', 'D', 'H', 'H', 'H', 'H'],
+ /*10*/ ['H', 'D', 'D', 'D', 'D', 'D', 'D', 'D', 'D', 'H'],
+ /*11*/ ['D', 'D', 'D', 'D', 'D', 'D', 'D', 'D', 'D', 'D'],
+ /*12*/ ['H', 'H', 'H', 'S', 'S', 'S', 'H', 'H', 'H', 'H'],
+ /*13*/ ['H', 'S', 'S', 'S', 'S', 'S', 'H', 'H', 'H', 'H'],
+ /*14*/ ['H', 'S', 'S', 'S', 'S', 'S', 'H', 'H', 'H', 'H'],
+ /*15*/ ['H', 'S', 'S', 'S', 'S', 'S', 'H', 'H', 'H', 'H'],
+ /*16*/ ['H', 'S', 'S', 'S', 'S', 'S', 'H', 'H', 'H', 'H'],
+ /*17*/ ['S', 'S', 'S', 'S', 'S', 'S', 'S', 'S', 'S', 'S'],
+ /*18*/ ['S', 'S', 'S', 'S', 'S', 'S', 'S', 'S', 'S', 'S'],
+ /*19*/ ['S', 'S', 'S', 'S', 'S', 'S', 'S', 'S', 'S', 'S'],
+ /*20*/ ['S', 'S', 'S', 'S', 'S', 'S', 'S', 'S', 'S', 'S'],
+ /*21*/ ['S', 'S', 'S', 'S', 'S', 'S', 'S', 'S', 'S', 'S']    //you should have already won
+];
+
+var tipChartWithAce = [
+ /* A*/ [],   //see pair chart
+ /* 2*/ ['H', 'H', 'H', 'D', 'D', 'D', 'H', 'H', 'H', 'H'],
+ /* 3*/ ['H', 'H', 'H', 'D', 'D', 'D', 'H', 'H', 'H', 'H'],
+ /* 4*/ ['H', 'H', 'H', 'D', 'D', 'D', 'H', 'H', 'H', 'H'],
+ /* 5*/ ['H', 'H', 'H', 'D', 'D', 'D', 'H', 'H', 'H', 'H'],
+ /* 6*/ ['H', 'D', 'D', 'D', 'D', 'D', 'H', 'H', 'H', 'H'],
+ /* 7*/ ['S', 'S', 'D', 'D', 'D', 'D', 'S', 'S', 'H', 'H'],
+ /* 8*/ ['S', 'S', 'S', 'S', 'S', 'D', 'S', 'S', 'S', 'S'],
+ /* 9*/ ['S', 'S', 'S', 'S', 'S', 'S', 'S', 'S', 'S', 'S'],
+ /*10*/ ['S', 'S', 'S', 'S', 'S', 'S', 'S', 'S', 'S', 'S']    //you should have already won
+];
+
+
+var tipChartPairs = [
+ /* A*/ ['P', 'P', 'P', 'P', 'P', 'P', 'P', 'P', 'P', 'P'],
+ /* 2*/ ['H', 'H', 'P', 'P', 'P', 'P', 'P', 'H', 'H', 'H'],
+ /* 3*/ ['H', 'H', 'H', 'P', 'P', 'P', 'P', 'H', 'H', 'H'],
+ /* 4*/ ['H', 'H', 'H', 'H', 'D', 'D', 'H', 'H', 'H', 'H'],
+ /* 5*/ ['H', 'D', 'D', 'D', 'D', 'D', 'D', 'D', 'D', 'H'],
+ /* 6*/ ['H', 'P', 'P', 'P', 'P', 'P', 'H', 'H', 'H', 'H'],
+ /* 7*/ ['H', 'P', 'P', 'P', 'P', 'P', 'P', 'H', 'S', 'H'],
+ /* 8*/ ['P', 'P', 'P', 'P', 'P', 'P', 'P', 'P', 'P', 'P'],
+ /* 9*/ ['S', 'P', 'P', 'P', 'P', 'P', 'S', 'P', 'P', 'S'],
+ /*10*/ ['S', 'S', 'S', 'S', 'S', 'S', 'S', 'S', 'S', 'S']
+];
+
+/////////////////////////////////////////////////////////
+//
+
+const COMMAND_UNKNOWN = 0;
+const COMMAND_DONT_UNDERSTAND = 1;
+const COMMAND_GENERAL_ERROR = 2;
+const COMMAND_SAY = 10;
+const COMMAND_CONFIRMATION = 11;
+
+const COMMAND_COUNT_CHIPS = 12;
+const COMMAND_TIP_OUTSIDE_GAME = 13;
+const COMMAND_TIP = 14;       //split up?
+const COMMAND_DESCRIBE_BET_OUTSIDE_GAME = 15;
+const COMMAND_DESCRIBE_BET = 16;
+const COMMAND_BET_INSIDE_GAME = 17;
+const COMMAND_BET_NAN = 18;
+const COMMAND_BET_NOT_AN_INTEGER = 19;
+const COMMAND_BET_TOO_LOW = 20;
+const COMMAND_BET_CANT_COVER = 21;
+const COMMAND_BET = 22;
+const COMMAND_BET_ALL = 23;
+const COMMAND_ASK_BET = 24;
+const COMMAND_WELCOME = 25;
+const COMMAND_OUT_OF_CHIPS = 26;
+const COMMAND_FIRST_DAILY_CHIPS = 27;
+const COMMAND_ADD_DAILY_CHIPS = 28;
+const COMMAND_NO_DAILY_CHIPS = 29;
+
+const COMMAND_DEALER_DOWN_CARD = 30;
+const COMMAND_DEALER_UP_CARD = 31;
+
+const COMMAND_FIRST_TWO_CARDS = 40;
+const COMMAND_FIRST_CARD = 41;
+const COMMAND_SECOND_CARD = 42;
+const COMMAND_ROUND_START = 43;
+const COMMAND_ROUND_END = 44;
+const COMMAND_PLAY_NEW_DECK = 45;
+
+const COMMAND_NATURAL_BOTH = 50;
+const COMMAND_NATURAL = 51;
+const COMMAND_NATURAL_DEALER = 52;
+
+const COMMAND_DESCRIBE_OUT_OF_GAME = 100;
+const COMMAND_DESCRIBE_DEALER_HAND = 101;
+const COMMAND_DESCRIBE_PLAYER_HAND = 102;
+const COMMAND_DESCRIBE_STATS = 103;
+const COMMAND_DESCRIBE_STATS_CHIPS = 104;
+const COMMAND_DESCRIBE_PLAYER_TOTAL = 105;
+const COMMAND_DESCRIBE_DEALER_CARD = 106;
+
+const COMMAND_MOVE_OUTSIDE_GAME = 110;
+const COMMAND_MOVE_DRAW = 111;
+const COMMAND_MOVE_BUST = 112;
+const COMMAND_MOVE_STAY = 113;
+
+const COMMAND_MOVE_DOUBLE_NOT_FIRST = 120;
+const COMMAND_MOVE_DOUBLE_CANT_COVER = 121;
+const COMMAND_MOVE_DOUBLE = 122;
+
+const COMMAND_MOVE_SPLIT_NOT_FIRST = 130;
+const COMMAND_MOVE_SPLIT_NOT_PAIR = 131;
+const COMMAND_MOVE_SPLIT_ONLY_ONCE = 132;
+const COMMAND_MOVE_SPLIT_CANT_COVER = 133;
+const COMMAND_MOVE_SPLIT = 134;
+const COMMAND_MOVE_SPLIT_DRAW = 135;
+const COMMAND_MOVE_SPLIT_FINISHED = 136;
+
+const COMMAND_MOVE_DEALER_REVEAL = 140;
+const COMMAND_MOVE_DEALER_DRAW = 141;
+const COMMAND_MOVE_DEALER_STAY = 142;
+const COMMAND_MOVE_DEALER_BUST = 143;
+const COMMAND_MOVE_DEALER_NO_PLAY = 144;
+const COMMAND_PLAY_DEALER_PEAKS = 145;
+const COMMAND_PLAY_DEALER_NO_NATURAL = 146;
+
+const COMMAND_PLAY_SPOT = 150;
+
+const COMMAND_PLAY_INSURANCE_ASK = 160;
+const COMMAND_PLAY_INSURANCE_ASK_AGAIN = 161;
+const COMMAND_PLAY_INSURANCE_ACCEPTED = 162;
+const COMMAND_PLAY_INSURANCE_DECLINED = 163;
+const COMMAND_PLAY_INSURANCE_BET_TOO_LOW = 164;
+const COMMAND_PLAY_INSURANCE_BET_CANT_COVER = 165;
+
+const COMMAND_RESULT_CHECK_SPOT = 200;
+const COMMAND_RESULT_COMPARE_WIN = 201;
+const COMMAND_RESULT_COMPARE_LOSE = 202;
+const COMMAND_RESULT_COMPARE_PUSH = 203;
+const COMMAND_RESULT_DEALER_BUST = 204;
+
+const COMMAND_RESULT_NATURAL_PUSH = 210;
+const COMMAND_RESULT_NATURAL_DEALER = 211;
+const COMMAND_RESULT_NATURAL_PLAYER = 212;
+const COMMAND_PLAY_INSURANCE_PAYS_OFF = 213;
+const COMMAND_PLAY_INSURANCE_NOT_NEEDED = 214;
+const COMMAND_PLAY_INSURANCE_COLLECTED = 215;
+
+const COMMAND_HELP_BASIC_OR_ADVANCE = 400;
+const COMMAND_RULES_BASIC = 401;
+const COMMAND_HELP_ADVANCED = 402;
+const COMMAND_RULES_NATURAL = 403;
+const COMMAND_RULES_HIT_AND_STAY = 404;
+const COMMAND_RULES_DOUBLE_DOWN = 405;
+const COMMAND_RULES_SPLIT = 406;
+const COMMAND_RULES_INSURANCE = 407;
+const COMMAND_RULES_TIPS = 408;
+const COMMAND_HELP_STAY = 409;
+const COMMAND_HELP_EXIT = 410;
+const COMMAND_HELP_CONTINUE = 411;
+
+const COMMAND_ABOUT = 450;
+const COMMAND_CLOSE = 451;
+const COMMAND_GOODBYE = 452;
+
+
+const COMMAND_AUDIO_CARD_DRAW = 500;
+const COMMAND_AUDIO_CHIPS = 501;
+const COMMAND_AUDIO_ICON_GOOD = 502;
+const COMMAND_AUDIO_SHUFFLE = 503;
+
+const cardDealAudioClips = [
+  {
+    begin: 0.0,
+    end: 0.6
+  },
+  {
+    begin: 4.2,
+    end: 4.7
+  },
+  {
+    begin: 7.0,
+    end: 7.4
+  },
+  {
+    begin: 8.3,
+    end: 8.7
+  },
+  {
+    begin: 11.3,
+    end: 12.0
+  },
+  {
+    begin: 12.6,
+    end: 13.0
+  },
+  {
+    begin: 14.3,
+    end: 14.7
+  },
+  {
+    begin: 18.0,
+    end: 18.5
+  },
+  {
+    begin: 19.5,
+    end: 19.9
+  },
+  {
+    begin: 22.0,
+    end: 22.35
+  },
+  {
+    begin: 25.1,
+    end: 25.7
+  }
+];
+
+const COMMAND_DELAY = 600;
+
+const COMMAND_SUGGEST = 1000;
+
+var COMMAND_NAME = [];
+COMMAND_NAME[COMMAND_UNKNOWN] = '*UNKNOWN*';
+COMMAND_NAME[COMMAND_SAY] = 'SAY';
+COMMAND_NAME[COMMAND_WELCOME] = 'WELCOME';
+COMMAND_NAME[COMMAND_BET] = 'BET';
+COMMAND_NAME[COMMAND_MOVE_DRAW] = 'MOVE (Draw)';
+COMMAND_NAME[COMMAND_MOVE_DRAW] = 'MOVE (Draw)';
+COMMAND_NAME[COMMAND_MOVE_STAY] = 'MOVE (Stay)';
+COMMAND_NAME[COMMAND_MOVE_DRAW] = 'MOVE (Bust)';
+COMMAND_NAME[COMMAND_PLAY_INSURANCE_ASK] = 'INSURANCE ask';
+COMMAND_NAME[COMMAND_PLAY_INSURANCE_BET_TOO_LOW] = 'INSURANCE bet too low';
+COMMAND_NAME[COMMAND_PLAY_INSURANCE_ACCEPTED] = 'INSURANCE reply yes';
+COMMAND_NAME[COMMAND_PLAY_INSURANCE_DECLINED] = 'INSURANCE reply no';
+COMMAND_NAME[COMMAND_PLAY_INSURANCE_PAYS_OFF] = 'INSURANCE pays off';
+COMMAND_NAME[COMMAND_PLAY_INSURANCE_NOT_NEEDED] = 'INSURANCE not needed';
+COMMAND_NAME[COMMAND_PLAY_INSURANCE_COLLECTED] = 'INSURANCE collected';
+COMMAND_NAME[COMMAND_ROUND_START] = 'ROUND start';
+COMMAND_NAME[COMMAND_ROUND_END] = 'ROUND end';
+COMMAND_NAME[COMMAND_SUGGEST] = 'SUGGEST';
+COMMAND_NAME[COMMAND_ASK_BET] = 'ASK_BET';
+COMMAND_NAME[COMMAND_RESULT_CHECK_SPOT] = 'RESULT_CHECK_SPOT';
+COMMAND_NAME[COMMAND_PLAY_SPOT] = 'PLAY_SPOT';
+
+
+const HAND_STATUS_UNKNOWN = 0;
+const HAND_STATUS_WAITING = 1;
+const HAND_STATUS_INPLAY = 2;
+const HAND_STATUS_BUST = 3;
+const HAND_STATUS_STAY = 4;
+const HAND_STATUS_NATURAL_21 = 5;
+
+const START_HAND_COUNT = 1;
+
+var createEntry = function(_command, _data) {
+  if (_data === null) {
+    if (typeof _command === 'object') {
+      return _command;
+    } else {
+      return {command:_command};
+    }
+  } else if (Array.isArray(_data)) {
+    return {command:_command, data:_data};
+  } else if (typeof _data === 'object') {
+    return Object.assign({}, {command:_command}, _data);
+  } else {
+    if (_data !== undefined) {
+      return {command:_command, data:_data};
+    } else {
+      return {command:_command};
+    }
+  }
+};
+
+//oneOf['apple', 'banana']
+var oneOf = function(_options) {
+  var length = _options.length;
+  var pick = Math.floor(Math.random() * length);
+  return _options[pick];
+};
+
+var selectRandom = function(_options) {
+
+  var weight = 0;
+  var length = _options.length;
+  var i;
+  var item;
+  
+  for (i = 0; i < length; i++) {
+    item = _options[i];
+    if (typeof item === 'object') {
+      if (item.weight !== undefined) {
+        weight += item.weight;
+      } else {
+        weight += 1;
+      }
+    } else {
+      weight += 1;
+    }
+  }
+  
+  //Now pick a random item
+  //#HACK - we remove a bit from the end to prevent any chance of not picking something
+  var pick = Math.random() * weight - 0.00001;
+  for (i = 0; i < length; i++) {
+    item = _options[i];
+    if (typeof item === 'object') {
+      if (item.weight !== undefined) {
+        pick -= item.weight;
+        if (pick <= 0) {
+          return item.value;
+        }
+      }
+    } else {
+      pick -= 1;
+      if (pick <= 0) {
+        return item;
+      }
+    }
+  }
+  
+  return null;
+};
+
+var selectSequential = function(_state, _options, _clamp, _step) {
+
+  var weight = 0;
+  var length = _options.length;
+  var i;
+  var item;
+  
+  for (i = 0; i < length; i++) {
+    item = _options[i];
+    if (typeof item === 'object') {
+      if (item.weight !== undefined) {
+        weight += item.weight;
+      } else {
+        weight += 1;
+      }
+    } else {
+      weight += 1;
+    }
+  }
+  
+  if (_step === undefined) {
+    _step = 1;
+  }
+  _step = Math.floor(Math.random() * _step) + 1;
+  
+  var pick = _state.last + _step;
+  //#WE remove a bit to prevent problems
+  if (pick > weight) {
+    if (_clamp) {
+      pick = weight;
+    } else {
+      pick -= weight;
+      //Handle any potential errors
+      if ((pick < 0) || (pick > weight)) {
+        pick = 0;
+      }
+    }
+  }
+  _state.last = pick;
+  
+  for (i = 0; i < length; i++) {
+    item = _options[i];
+    if (typeof item === 'object') {
+      if (item.weight !== undefined) {
+        pick -= item.weight;
+        if (pick <= 0) {
+          return item.value;
+        }
+      }
+    } else {
+      pick -= 1;
+      if (pick <= 0) {
+        return item;
+      }
+    }
+  }
+  
+  return null;
+};
+
+var talkOrdinal = function(n) {
+  switch (n) {
+    case 1: return 'first';
+    case 2: return 'second';
+    case 3: return 'third';
+    case 4: return 'fourth';
+    case 5: return 'fifth';
+    case 6: return 'sixth';
+    case 7: return 'seventh';
+    case 8: return 'eighth';
+    case 9: return 'ninth';
+    case 10: return 'tenth';         //exceptions
+    case 11: return 'eleventh';
+    case 12: return 'twelvth';
+    default: {
+      var ones = n % 10;
+      if (ones === 1) {
+        return n + 'st';
+      } else if (ones === 2) {
+        return n + 'nd';
+      } else if (ones == 3) {
+        return n + 'rd';
+      } else {
+        return n + 'th';
+      }
+    }
+  }
+};
+
+function Stats() {
+
+  this.roundsPlayed = 0;
+  
+  this.winStreak = 0;
+  this.loseStreak = 0;
+  this.blackjackStreak = 0;
+  
+  this.wins = 0;
+  this.loses = 0;
+  this.ties = 0;
+  
+  this.blackjacks = 0;
+  
+  this.chipsWon = 0;
+  this.chipsLost = 0;
+  
+  this.maxBet = 0;
+  this.maxChips = 0;
+  this.minChips = 0;
+}
+  
+  
+function ConvEng(conv) {
+  
+  this.conv = conv;
+  this.commands = [];
+  
+  this.getConv = function() {
+    return this.conv;
+  };
+  
+  //#TODO: get/set
+  this.gameData = function() {
+    
+    return this.conv.data;
+  };
+
+  this.userStorage = function() {
+    return this.conv.user.storage;
+  };
+
+  this.getChips = function() {
+    return this.conv.user.storage.chips;
+  };
+
+  this.setChips = function(chipCount) {
+    this.conv.user.storage.chips = chipCount;
+  };
+
+  //delta can be negative
+  //#warning: no range checking
+  this.addChips = function(delta) {
+    this.conv.user.storage.chips = this.conv.user.storage.chips + delta;
+  };
+  
+  //#TODO: get/set
+  this.stats = function() {
+    
+    return this.conv.data.stats;
+  };
+  
+  this.addEvent = function(_command, _data) {
+    var entry = createEntry(_command, _data);
+    this.commands.push(entry);
+  };
+  
+  this.dump = function() {
+    console.log('Dump (' + this.commands.length + '): ');
+    console.log('%o', this);
+    
+    var length = this.commands.length;
+    var command;
+    
+    for (var i = 0; i < length; i++) {
+      
+      command = this.commands[i];
+    
+      var id = command.command;
+      var idName = COMMAND_NAME[id.toString()];
+      
+      if (idName === undefined) {
+          idName = '';
+      }
+      
+      console.log('%s -> %o', idName, command);
+    }
+      
+    console.log('----');
+  };
+  
+  this.isConversationShort = function() {
+    return (this.commands.length < 5);   //What to pick here?
+  };
+  
+  this.render = function(conv) {
+
+    var response = '<speak>';
+    
+    var length = this.commands.length;
+    var command;
+    var sayCount = 0;
+  
+    for (var i = 0; i < length; i++) {
+      
+      command = this.commands[i];
+      if ((command.command == COMMAND_SAY) && (command.data) && (command.data.length > 0)) {
+
+        if (sayCount > 0) {
+          response += ' ';
+        }
+        
+        response += command.data;
+        sayCount += 1;
+      }
+      
+      //Should this be here or in compile?
+      if (command.command == COMMAND_AUDIO_CHIPS) {
+        response += '<audio src="https://actions.google.com/sounds/v1/impacts/chain_jingle.ogg"  clipEnd="1s"></audio>';
+      }
+      
+      if (command.command == COMMAND_AUDIO_CARD_DRAW) {
+        //#TODO: random card sound pick
+        
+        const id = Math.floor(Math.random() * cardDealAudioClips.length);
+        
+        const begin = cardDealAudioClips[id].begin;
+        const end = cardDealAudioClips[id].end;
+        
+        response += '<audio src="https://actions.google.com/sounds/v1/sports/drawing_cards.ogg" clipBegin="' + begin + 's" clipEnd="' + end + 's"></audio>';
+      }
+      
+      if (command.command == COMMAND_AUDIO_ICON_GOOD) {
+        response += '<audio src="https://actions.google.com/sounds/v1/cartoon/cymbal_kick.ogg" clipEnd="1s"></audio>';
+      }
+      if (command.command == COMMAND_AUDIO_SHUFFLE) {
+        response += '<audio src="https://actions.google.com/sounds/v1/sports/card_game.ogg"></audio>';
+      }
+      
+      if (command.command == COMMAND_DELAY) {
+        var msDelay = command.data;
+        if (msDelay === undefined) {
+          msDelay = '500';
+        }
+        
+        response += '<break time="' + command.data + 'ms"/>';
+      }
+
+      if ((command.command == COMMAND_CLOSE) && (command.data) && (command.data.length > 0)) {
+        //if there is any CLOSE command then we just drop what we were building up and quit
+        conv.close(command.data);
+        return;
+      }
+      
+    }
+    
+    response += '</speak>';
+    
+    conv.ask(response);
+  };
+  
+  this.renderSuggestionChips = function(conv) {
+    
+    if (!conv.surface.capabilities.has('actions.capability.SCREEN_OUTPUT')) {
+      return;
+    }
+    
+    var length = this.commands.length;
+    var command;
+    var suggestions = [];
+  
+    for (var i = 0; i < length; i++) {
+      
+      command = this.commands[i];
+      if ((command.command == COMMAND_SUGGEST) && (command.data) && (command.data.length > 0)) {
+        suggestions.push(command.data);
+      }
+      
+    }
+
+    if (suggestions.length > 0) {
+      conv.ask(new Suggestions(suggestions));
+    }
+
+  };
+  
+  
+  this.renderConfimration = function(conv) {
+    
+    var length = this.commands.length;
+    var command;
+  
+    for (var i = 0; i < length; i++) {
+      
+      command = this.commands[i];
+      if ((command.command == COMMAND_CONFIRMATION) && (command.data) && (command.data.length > 0)) {
+        conv.ask(new Confirmation(command.data));
+        //We only support the first confirmation
+        return;
+      }
+      
+    }
+
+  };
+     
+  
+  this.reset = function() {
+    this.commands = [];
+  };
+
+/*  
+  this.readState = function(conv) {
+    this.state = {
+      insurance: conv.data.state.insurance
+    };
+  }
+  
+  this.addState(tag, valueToAdd) {
+    this.state = Object.assign(this.state, {tag: valueToAdd});
+  }
+  
+  this.removeState(tag) {
+    this.state.tag = undefined;
+  }
+  
+  this.writeState = function(conv) {
+    
+  }
+*/
+
+  this.compile = function() {
+  
+    var nextCommands = [];
+    var response;
+    
+    var length = this.commands.length;
+    var command;
+    
+    for (var i = 0; i < length; i++) {
+      
+      command = this.commands[i];
+      response = null;
+      
+      switch (command.command) {
+        default:
+        case COMMAND_UNKNOWN: {
+          nextCommands.push(command);
+          break;
+        }
+        
+        case COMMAND_DONT_UNDERSTAND: {
+          //#TODO: this needs to be a lot more complicated
+          response = selectRandom([
+                        "Sorry, I don't understand. Can you say that again?",
+                        "Can you repeat that?",
+                        "Can you repeat that or find a different way to say it.",
+                        "I didn't get that."
+                      ]);
+          nextCommands.push(createEntry(COMMAND_SAY, response));
+          break;
+        }
+        
+        case COMMAND_GENERAL_ERROR: {
+          nextCommands.push(createEntry(COMMAND_SAY, 'I seem to have an error.'));
+          break;
+        }
+
+        case COMMAND_WELCOME: {
+          response = selectRandom([
+                        `Welcome. I'm Carlos.  To start a game of blackjack try placing a bet like "Bet 10" or "Bet 20".`,
+                        `Pull up a chair, let's play some blackjack. How much do you want to bet?`,
+                        `Interested in some 21? You've come to the right place. Let me know what your first bet is.`,
+                        `Hi - I'm Carlos. How much would you like to bet on your first hand of blackjack?`
+                      ]);
+          nextCommands.push(createEntry(COMMAND_SAY, response));
+          nextCommands.push(createEntry(COMMAND_SUGGEST, 'Help'));
+          break;
+        }
+        
+        case COMMAND_OUT_OF_CHIPS: {
+          response = selectRandom([
+                        `Looks like you ran out of chips. I guess that's the end of our game for today.`,
+                        `You're out of chips.  Come back tomorrow when you'll get more.`,
+                        `Your chips have run out.  Come back tomorrow.`,
+                      ]);
+          nextCommands.push(createEntry(COMMAND_SAY, response));
+          nextCommands.push(createEntry(COMMAND_SUGGEST, 'Cancel'));
+          break;
+        }
+
+        case COMMAND_FIRST_DAILY_CHIPS: {
+          response = selectRandom([
+                        `Let's get you started off with a stack of ${command.add} chips.`,
+                        `You get to start off with ${command.add} chips.`,
+                        `I'm going to start you off with some free chips.  So here's a stack of ${command.add} to get going.`,
+                      ]);
+          nextCommands.push(createEntry(COMMAND_SAY, response));
+          break;
+        }
+        
+        case COMMAND_ADD_DAILY_CHIPS: {
+          
+          if (command.add == command.total) {
+            response = selectRandom([
+                          `Looks like you ran out last time, so let's give you ${command.add} chips.`,
+                          `A new day, a new stack of ${command.add} chips.`,
+                          `Here's your daily allowance of ${command.add} chips.  Hope you have better luck today.`,
+                        ]);
+          } else {
+            response = selectRandom([
+                          `It's a new day so let's give you another ${command.add} chips which brings your total up to ${command.total}.`,
+                          `A new day, a new stack of ${command.add} chips.  You now have ${command.total} chips.`,
+                          `Here's your daily allowance of ${command.add} chips.  You're now sitting on a total of ${command.total} chips.`,
+                        ]);
+          }
+          nextCommands.push(createEntry(COMMAND_SAY, response));
+          break;
+        }
+        
+        case COMMAND_ASK_BET: {
+          response = selectRandom([
+                        `So how much to risk on the next hand?`,
+                        `How much on the next round?`,
+                        `Make your wager.`,
+                        `Bet?`,
+                        `Bet.`,
+                        `Place your bet.`,
+                        `How much do you want to bet?`,
+                        `How much on the next hand?`,
+                        `How much would you like to bet?`,
+                        `Let me know what your bet is.`
+                      ]);
+          nextCommands.push(createEntry(COMMAND_SAY, response));
+          break;
+        }
+    
+        case COMMAND_COUNT_CHIPS: {
+        
+          if (command.data <= 0) {
+            
+            //#TODO: handle in-game different from outside of game
+            response = selectRandom([
+                        "You have no chips left.",
+                        "You're out of chips.",
+                        "You're out. There's nothing left.  Come back tomorrow.",
+                        "Your bank is drained dry. Come back tomorrow and you'll get some more chips... and maybe some better luck.",
+                        "Right now you have nothing left, but you can come back tomorrow and you'll be able to play again.",
+                        "Looks like you had a bad hand... or two because you are out of money.",
+                      ]);
+            
+          } else {
+          
+            response = selectRandom([
+                        `You have ${command.data} left.`,
+                        `You have ${command.data} chips.`,
+                        `You have ${command.data} chips left.`,
+                        `Looks like you have ${command.data} chips left.`,
+                        {
+                          weight: command.data < 10 ? 1 : 0,
+                          value: `You are getting very low.  You only have {$command.data} chips left`
+                        },
+                        {
+                          weight: command.data > 40 ? 0.3 : 0,
+                          value: "You have... let's see... " + (command.data - 10) + " ... " + (command.data - 5) + " ... " + command.data + '.  So ' + command.data + " chips.",
+                        },
+                        {
+                          weight: (command.data > 100) ? 1 : 0,
+                          value: "You're doing well.  You have about " + command.data + " chips."
+                        }
+                        ]);
+          }
+                      
+          nextCommands.push(createEntry(COMMAND_SAY, response));
+          break;
+        }
+        
+        case COMMAND_TIP_OUTSIDE_GAME: {
+          nextCommands.push(createEntry(COMMAND_SAY, 'My tip is to make a bet and play a hand.'));
+          nextCommands.push(createEntry(COMMAND_SAY, 'Let me know how much you want to bet.'));
+          break;
+        }
+        
+        case COMMAND_TIP: {
+          switch (command.data) {
+            case 'hit': {
+                nextCommands.push(createEntry(COMMAND_SAY,
+                  selectRandom([
+                    "You should hit.",
+                    "I'd hit.",
+                    "You would probably be in a better position if you hit.",
+                    "Mmmmm... hit"
+                  ])
+                ));
+                break;
+            }
+            case 'stand': {
+                nextCommands.push(createEntry(COMMAND_SAY,
+                  selectRandom([
+                    "You should stay.",
+                    "I'd stay.",
+                    "I wouldn't take any more cards.",
+                    "Stay. What do you want to do?"
+                  ])
+                ));
+              break;
+            }
+            case 'double': {
+                nextCommands.push(createEntry(COMMAND_SAY,
+                  selectRandom([
+                    "You should double down.",
+                    "I'd double down.",
+                    "You're in a good position right now.  You have a chance to make a good profit by doubling down."
+                  ])
+                ));
+              break;
+            }
+            case 'split': {
+                nextCommands.push(createEntry(COMMAND_SAY,
+                  selectRandom([
+                    "You should split.",
+                    "I'd split.",
+                    "With those two cards I'd split.",
+                    "You should split that pair."
+                  ])
+                ));
+              break;
+            }
+            default:
+            case 'unknown': {
+                nextCommands.push(createEntry(COMMAND_SAY,
+                  selectRandom([
+                    "Hmmm.  Don't know.  It's up to you.",
+                    "I'm not really sure.",
+                    "That's a tough one.  Can't really say."
+                  ])
+                ));
+              break;
+            }
+    
+          }
+          break;
+        }
+        
+        case COMMAND_DESCRIBE_BET_OUTSIDE_GAME: {
+          nextCommands.push(createEntry(COMMAND_SAY, "There is no bet. The hand hasn't started yet.  Let me know how much you want to bet."));
+          break;
+        }
+        
+        case COMMAND_DESCRIBE_BET: {
+          nextCommands.push(createEntry(COMMAND_SAY, 
+                  selectRandom([
+                    `Your current bet is ${command.data} chips.`,
+                    `You have wagered ${command.data}.`,
+                    `You currently have ${command.data} on the table.`,
+                    `There's ${command.data} in chips on the table.`
+                  ]))
+                );
+          break;
+        }
+        
+        case COMMAND_BET_INSIDE_GAME: {
+          nextCommands.push(createEntry(COMMAND_SAY, `You already made a bet and are in the middle of a hand.`));
+          break;
+        }
+        
+        case COMMAND_BET_NAN: {
+          nextCommands.push(createEntry(COMMAND_SAY, `Please specifiy a number.`));
+          break;
+        }
+        
+        case COMMAND_BET_NOT_AN_INTEGER: {
+          nextCommands.push(createEntry(COMMAND_SAY, `You can only specify a whole number of chips.`));
+          break;
+        }
+        
+        case COMMAND_BET_TOO_LOW: {
+          nextCommands.push(createEntry(COMMAND_SAY, selectRandom([
+                    `You can't bet less than 1 chip.`,
+                    `The minimum bet is 1 chip.`
+                  ])));
+          break;
+        }
+        
+        case COMMAND_BET_CANT_COVER: {
+          
+          if (command.stack <= 0) {
+            response = selectRandom([
+                                  "You have no chips left. Come back tomorrow.",
+                                  "You're out of chips. Come back tomorrow.",
+                                  "You're out. There's nothing left.  Come back tomorrow.",
+                                  "Your bank is drained dry. Come back tomorrow and you'll get some more chips... and maybe some better luck.",
+                                  "Right now you have nothing left, but you can come back tomorrow and you'll be able to play again.",
+                                  "Looks like you had a bad hand... or two because you're out of money.",
+                                ]);            
+          } else {
+          
+            nextCommands.push(createEntry(COMMAND_SAY,  selectRandom([
+                    `You don't have enough chips. You only have ${command.stack} chips left.`,
+                    `You only have ${command.stack}. You can't bet ${command.bet}.`,
+                    `You can't bet that much.  It's more than you have.`
+                  ])));
+                  
+          }
+          break;
+        }
+        
+        case COMMAND_BET: {
+          nextCommands.push(createEntry(COMMAND_AUDIO_CHIPS));
+          nextCommands.push(createEntry(COMMAND_SAY, `You bet ${command.data}.`));
+          break;
+        }
+        
+        case COMMAND_BET_ALL: {
+          nextCommands.push(createEntry(COMMAND_AUDIO_CHIPS));
+          nextCommands.push(createEntry(COMMAND_SAY, `You throw in all ${command.data} of your chips.`));
+          break;
+        }
+        
+        case COMMAND_DEALER_UP_CARD: {
+          nextCommands.push(createEntry(COMMAND_AUDIO_CARD_DRAW));
+          nextCommands.push(createEntry(COMMAND_SAY, selectRandom([
+                    `The dealer's card is ${talkCard(command.data)}.`,
+                    `The dealer gets ${talkCard(command.data)}.`,
+                    `The dealer shows ${talkCard(command.data)}.`
+                    ])));
+          break;
+        }
+        
+        case COMMAND_DEALER_DOWN_CARD: {
+          nextCommands.push(createEntry(COMMAND_AUDIO_CARD_DRAW));
+          nextCommands.push(createEntry(COMMAND_SAY, createEntry(COMMAND_SAY, selectRandom([
+                    `The dealer gets one down card.`,
+                    `The dealer gets one down.`,
+                    `One down card for the dealer.`,
+                    `One down for the dealer.`,
+                    `Hole card for the dealer.`,
+                    `A card for the dealer.`,
+                    ``
+                  ]))));
+          break;
+        }
+
+        case COMMAND_FIRST_TWO_CARDS: {
+          nextCommands.push(createEntry(COMMAND_SAY, talkPlayerHand(command.data)));
+          break;
+        }
+
+        case COMMAND_ROUND_START: {
+          if (Math.random() < 0.05) {
+            nextCommands.push(createEntry(COMMAND_SAY, selectRandom([
+                    `Let's deal out some cards.`,
+                    `Let's go.`,
+                    `Good luck.`
+                  ])));
+                  
+          }
+          break;
+        }
+        
+        case COMMAND_FIRST_CARD: {
+          nextCommands.push(createEntry(COMMAND_AUDIO_CARD_DRAW));
+          nextCommands.push(createEntry(COMMAND_SAY, `Your first card is ${talkCard(command.hand)}.`));
+          break;
+        }
+
+        case COMMAND_SECOND_CARD: {
+          nextCommands.push(createEntry(COMMAND_AUDIO_CARD_DRAW));
+          nextCommands.push(createEntry(COMMAND_SAY, `Your second card is ${talkCard(command.hand)}.`));
+          break;
+        }
+        
+        case COMMAND_PLAY_NEW_DECK: {
+          nextCommands.push(createEntry(COMMAND_SAY, `<p><s>The deck is out of cards, so hold on while I shuffle up a new deck.</s>`));
+          nextCommands.push(createEntry(COMMAND_AUDIO_SHUFFLE));
+          nextCommands.push(createEntry(COMMAND_DELAY, 500));
+          nextCommands.push(createEntry(COMMAND_SAY, `<s>Alright, let's continue.</s></p>`));
+          break;
+        }
+        
+        case COMMAND_NATURAL_BOTH: {
+          nextCommands.push(createEntry(COMMAND_SAY, selectRandom([
+                    `Since we both have a natural 21.  It's a push.`,
+                    `Blackjack!  Unfortunatly the dealer also has 21 so it's a push.`,
+                    `A natural 21.  And the dealer also has 21.  Tie.`,
+                    `It's a push.  Both players have 21.` 
+                  ])));
+          break;
+        }
+        
+        case COMMAND_NATURAL: {
+          nextCommands.push(createEntry(COMMAND_SAY, selectRandom([
+                    `Blackjack!  You win.`,
+                    `A natural 21.  You win twice your bet.`,
+                    `Nice, a natural 21.  You win.`,
+                    `Nice, a natural 21.  You win your bet plus some.`
+                  ])));
+          nextCommands.push(createEntry(COMMAND_AUDIO_ICON_GOOD));
+          break;
+        }
+        
+        case COMMAND_NATURAL_DEALER: {
+          nextCommands.push(createEntry(COMMAND_SAY, selectRandom([
+                    `<p>Dealer has 21.</p>`,
+                    `<p>Dealer has a natural 21.</p>`,
+                    `<p>Looks like I have 21.</p>`
+                  ])));
+          break;
+        }
+        
+        case COMMAND_DESCRIBE_OUT_OF_GAME: {
+          nextCommands.push(createEntry(COMMAND_SAY, `The hand hasn't started yet.  Let me know how much you want to bet.  You have ${command.data} chips.`));
+          break;
+        }
+        
+        case COMMAND_DESCRIBE_DEALER_HAND: {
+          nextCommands.push(createEntry(COMMAND_SAY, talkDealerHandDown(command.hand)));
+          break;
+        }
+        
+        case COMMAND_DESCRIBE_PLAYER_HAND: {
+          nextCommands.push(createEntry(COMMAND_SAY, talkPlayerHand(command.data)));
+          break;
+        }
+        
+        case COMMAND_DESCRIBE_PLAYER_TOTAL: {
+          nextCommands.push(createEntry(COMMAND_SAY, `You re currently at ${command.playerTotal}. What do you want to do?`));
+          break;
+        }
+
+        case COMMAND_DESCRIBE_DEALER_CARD: {
+          nextCommands.push(createEntry(COMMAND_SAY, `The dealer is showing a ${talkCard(command.data)}.`));
+          break;
+        }
+        
+        case COMMAND_DESCRIBE_STATS: {
+          const roundsPlayed = command.roundsPlayed;
+          const wins = command.wins;
+          const loses = command.loses;
+          
+          if (wins + loses <= 0) {
+            nextCommands.push(createEntry(COMMAND_SAY, `I can keep track of your stats, but you should probably play a few rounds first.` ));
+          } else {
+            if (wins === 0) {
+              nextCommands.push(createEntry(COMMAND_SAY, `Well..you haven't won a game yet, but you lost ${loses}.` ));
+            } else if (loses === 0) {
+              nextCommands.push(createEntry(COMMAND_SAY, `You haven't lost yet.  You've won ${wins} games so far.` ));
+            } else {
+              nextCommands.push(createEntry(COMMAND_SAY, `You've played ${roundsPlayed} rounds and you've won ${wins} games.` ));
+              const winRatio = Math.floor(100.0 * (wins/(wins + loses)));    //we don't include pushes
+              nextCommands.push(createEntry(COMMAND_SAY, `You have a win/lose ratio of around ${winRatio} percent.`));
+            }
+          }
+          break;
+        }
+        
+        case COMMAND_DESCRIBE_STATS_CHIPS: {
+          const delta = command.maxChips - command.minChips;
+          
+          if (delta > 50) {
+            if (command.minChips <= 0) {
+              nextCommands.push(createEntry(COMMAND_SAY, `At your peak you had ${command.maxChips} chips but you have run out of chips before.` ));
+            } else {
+              nextCommands.push(createEntry(COMMAND_SAY, `At your peak you had ${command.maxChips} chips.  At your lowest you were down to ${command.minChips}.` ));
+            }
+          }
+          break;
+        }
+        
+        case COMMAND_MOVE_OUTSIDE_GAME: {
+          nextCommands.push(createEntry(COMMAND_SAY, `The hand hasn't started yet.  Let me know how much you want to bet.`));
+          break;
+        }
+        
+        case COMMAND_MOVE_DRAW: {
+          nextCommands.push(createEntry(COMMAND_AUDIO_CARD_DRAW));
+          nextCommands.push(createEntry(COMMAND_SAY, `You draw ${talkCard(command.card)}. You have a total of ${command.total}.`));
+          break;
+        }
+        
+        case COMMAND_MOVE_BUST: {
+          nextCommands.push(createEntry(COMMAND_SAY, `You bust.`));
+          break;
+        }
+        
+        case COMMAND_MOVE_STAY: {
+          nextCommands.push(createEntry(COMMAND_SAY, `You stay at ${command.total}.`));
+          break;
+        }
+        
+        case COMMAND_MOVE_DEALER_REVEAL: {
+          nextCommands.push(createEntry(COMMAND_AUDIO_CARD_DRAW));
+          nextCommands.push(createEntry(COMMAND_SAY, `Dealer flips over ${talkCard(command.card)} and is currently at ${command.total}.`));
+          break;
+        }
+        
+        case COMMAND_MOVE_DEALER_DRAW: {
+          nextCommands.push(createEntry(COMMAND_AUDIO_CARD_DRAW));
+          response = selectRandom([
+                    `<p>Dealer draws ${talkCard(command.card)}. Dealer is at ${command.total}.</p>`,
+                    `<p>Dealer draws ${talkCard(command.card)} for a total of ${command.total}.</p>`,
+                    `<p>Dealer adds ${talkCard(command.card)}.  I'm now at ${command.total}.</p>`,
+                    `<p>Dealer gets ${talkCard(command.card)} and is at ${command.total}.</p>`,
+                    `<p>Another card for the dealer - ${talkCard(command.card)} which now totals ${command.total}.</p>`
+                  ]);
+          nextCommands.push(createEntry(COMMAND_SAY, response));
+          break;
+        }
+        
+        case COMMAND_MOVE_DEALER_BUST: {
+          nextCommands.push(createEntry(COMMAND_SAY, `Dealer busts.`));
+          break;
+        }
+        
+        case COMMAND_MOVE_DEALER_STAY: {
+          nextCommands.push(createEntry(COMMAND_SAY, `Dealer stays.`));
+          break;
+        }
+        
+        case COMMAND_MOVE_DEALER_NO_PLAY: {
+          nextCommands.push(createEntry(COMMAND_SAY, `The dealer is done.`));
+          break;
+        }
+        
+        case COMMAND_RESULT_CHECK_SPOT: {
+          nextCommands.push(createEntry(COMMAND_SAY, `Now looking at spot ${command.spot + 1}.`));
+          break;
+        }
+        
+        case COMMAND_RESULT_COMPARE_WIN: {
+          nextCommands.push(createEntry(COMMAND_SAY, `You win.`));
+          break;
+        }
+
+        case COMMAND_RESULT_COMPARE_LOSE: {
+          nextCommands.push(createEntry(COMMAND_SAY, `You lose.`));
+          break;
+        }
+
+        case COMMAND_RESULT_COMPARE_PUSH: {
+          nextCommands.push(createEntry(COMMAND_SAY, selectRandom([
+                    `It's a tie.`,
+                    `Tie.`,
+                    `Push.`,
+                    `It's a push.`,
+                    `Draw.`
+                  ])));
+          break;
+        }
+        
+        case COMMAND_RESULT_DEALER_BUST: {
+          nextCommands.push(createEntry(COMMAND_SAY, `You win.`));
+          break;
+        }
+        
+        case COMMAND_RESULT_NATURAL_DEALER: {
+          nextCommands.push(createEntry(COMMAND_SAY, `Dealer wins with a natural 21.`));
+          break;
+        }
+
+        case COMMAND_RESULT_NATURAL_PLAYER: {
+          nextCommands.push(createEntry(COMMAND_SAY, `Player wins with a natural 21.`));
+          break;
+        }
+
+        case COMMAND_RESULT_NATURAL_PUSH: {
+          nextCommands.push(createEntry(COMMAND_SAY, `Dealer and player both have 21 so it's a tie.`));
+          break;
+        }
+        
+        case COMMAND_MOVE_DOUBLE_NOT_FIRST: {
+          if (command.stack <= 0) {
+            nextCommands.push(createEntry(COMMAND_SAY, `You don't have any chips left you can't double down.`));
+          } else {
+            nextCommands.push(createEntry(COMMAND_SAY, `You only have ${command.stack} chips.  You can't double down a bet of ${command.bet}.`));
+          }
+          break;
+        }
+        
+        case COMMAND_MOVE_DOUBLE_CANT_COVER: {
+          nextCommands.push(createEntry(COMMAND_SAY, `You only have ${command.stack} chips.  You can't double down a bet of ${command.bet}.`));
+          break;
+        }
+        
+        case COMMAND_MOVE_DOUBLE: {
+          nextCommands.push(createEntry(COMMAND_AUDIO_CHIPS));
+          nextCommands.push(createEntry(COMMAND_SAY, selectRandom([
+                    `You double down.`,
+                    `You throw in more chips.`,
+                    `You throw in another ${command.bet}.`,
+                    `You double your bet to ${command.bet * 2}.`
+                  ])));
+          break;
+        }
+
+        case COMMAND_MOVE_SPLIT_NOT_PAIR: {
+          nextCommands.push(createEntry(COMMAND_SAY, `You can only split pairs and you have ${command.data[0]} and ${command.data[1]}.`));
+          break;
+        }
+        
+        case COMMAND_MOVE_SPLIT_ONLY_ONCE: {
+          nextCommands.push(createEntry(COMMAND_SAY, `Sorry.  You are only allowed to split once.  What would you like to do instead?`));
+          break;
+        }
+        
+        case COMMAND_MOVE_SPLIT_NOT_FIRST: {
+          nextCommands.push(createEntry(COMMAND_SAY, `You only split at the start of your hand.`));
+          break;
+        }
+        
+        case COMMAND_MOVE_SPLIT_CANT_COVER: {
+          nextCommands.push(createEntry(COMMAND_SAY, `You only have ${command.stack} chips.  You can't have add another bet of ${command.bet}.`));
+          break;
+        }
+        
+        case COMMAND_MOVE_SPLIT: {
+          nextCommands.push(createEntry(COMMAND_AUDIO_CHIPS));
+          if (Math.random() < 0.1) {
+            nextCommands.push(createEntry(COMMAND_SAY, selectRandom([
+                    `You add another ${command.bet} chips to cover the split.`,
+                    `You add some more chips.`
+                    ])));
+          }
+          nextCommands.push(createEntry(COMMAND_SAY, `Let's split up your pair of ${talkCardPair(command.hand[0])}.`));
+          break;
+        }
+        
+        case COMMAND_MOVE_SPLIT_DRAW: {
+          if (command.pairIndex === 0) {
+            nextCommands.push(createEntry(COMMAND_AUDIO_CARD_DRAW));
+            nextCommands.push(createEntry(COMMAND_SAY, `For your original hand you get ${talkCard(command.hand[1])}.`));
+          } else {
+            nextCommands.push(createEntry(COMMAND_AUDIO_CARD_DRAW));
+            nextCommands.push(createEntry(COMMAND_SAY, `For your other hand you have ${talkCard(command.hand[0])} and draw ${talkCard(command.hand[1])} for a total of ${command.total}.`));
+          }
+          break;
+        }
+        
+        case COMMAND_MOVE_SPLIT_FINISHED: {
+          nextCommands.push(createEntry(COMMAND_SAY, `<p>Back to your first hand. You have ${talkCard(command.hand[0])} and ${talkCard(command.hand[1])} for a total of ${command.total}. What would you like to do?</p>`));
+          break;
+        }
+        
+        case COMMAND_PLAY_SPOT: {
+          nextCommands.push(createEntry(COMMAND_SAY, `Let's look at hand number ${command.spot + 1}.`));
+          break;
+        }
+        
+        case COMMAND_PLAY_INSURANCE_ASK: {
+          nextCommands.push(createEntry(COMMAND_SAY, `<p>The dealer is showing an Ace.  Do you want to buy insurance?</p>`));
+          break;
+        }
+        case COMMAND_PLAY_INSURANCE_ASK_AGAIN: {
+          nextCommands.push(createEntry(COMMAND_SAY, `Sorry, do you want insurance?`));
+          break;
+        }
+        case COMMAND_PLAY_INSURANCE_ACCEPTED: {
+          nextCommands.push(createEntry(COMMAND_SAY, `Insurance was accepted.`));
+          nextCommands.push(createEntry(COMMAND_AUDIO_CHIPS));
+          break;
+        }
+        case COMMAND_PLAY_INSURANCE_DECLINED: {
+          nextCommands.push(createEntry(COMMAND_SAY, `Insurance was declined.`));
+          break;
+        }
+        case COMMAND_PLAY_INSURANCE_BET_TOO_LOW: {
+          nextCommands.push(createEntry(COMMAND_SAY, `<p>Normally I'd ask if you want insurance, but your bet is too low.</p>`));
+          break;
+        }
+        case COMMAND_PLAY_INSURANCE_BET_CANT_COVER: {
+          nextCommands.push(createEntry(COMMAND_SAY, `<p>Normally I'd ask if you want insurance, but you don't have enough chips.</p>`));
+          break;
+        }
+        case COMMAND_PLAY_INSURANCE_PAYS_OFF: {
+          nextCommands.push(createEntry(COMMAND_SAY, `<p>Dealer had blackjack - insurance pays off.</p>`));
+          break;
+        }
+        case COMMAND_PLAY_INSURANCE_NOT_NEEDED: {
+          nextCommands.push(createEntry(COMMAND_SAY, `Dealer does not have a natural.`));
+          break;
+        }
+        case COMMAND_PLAY_INSURANCE_COLLECTED: {
+          nextCommands.push(createEntry(COMMAND_SAY, `Insurance does not pay.`));
+          break;
+        }
+        case COMMAND_PLAY_DEALER_PEAKS: {
+          response = selectRandom([
+                    {
+                      weight: 5,
+                      //null response
+                    },
+                    `Let me check if I have a natural.`,
+                    `I'll check if I have a natural.`,
+                    `I'll quickly check my hole card.`
+                    ]);
+          if (typeof response === 'string') {
+            nextCommands.push(createEntry(COMMAND_SAY, response));
+          }
+          break;
+        }
+        case COMMAND_PLAY_DEALER_NO_NATURAL: {
+          response = selectRandom([
+                    {
+                      weight: 5,
+                      //null response
+                    },
+                    `No natural for the dealer`,
+                    `I don't have 21.`,
+                    `Dealer does not have a natural.`
+                    ]);
+          if (typeof response === 'string') {
+            nextCommands.push(createEntry(COMMAND_SAY, response));
+          }
+          break;
+        }
+
+
+        case COMMAND_ABOUT: {
+          nextCommands.push(createEntry(COMMAND_SAY, `Hi! My name is Carlos. I'm here to help you play blackjack, learn the in and outs of the game and perhaps perfect your strategy. My boss is Steady Access Inc. If you ever want help just ask for it.`));
+          break;
+        }
+        case COMMAND_GOODBYE: {
+          nextCommands.push(createEntry(COMMAND_CLOSE, `OK.  Bye.  Come back soon.`));
+          break;
+        }
+        
+        case COMMAND_HELP_BASIC_OR_ADVANCE: {
+          nextCommands.push(createEntry(COMMAND_SAY, `<p>Are you interested in the basic or the advanced rules?</p>`));
+          break;
+        }
+        case COMMAND_HELP_STAY: {
+          nextCommands.push(createEntry(COMMAND_SAY, `<p>Are you interested in the basic or the advanced rules?</p>`));
+          break;
+        }
+        case COMMAND_HELP_EXIT: {
+          nextCommands.push(createEntry(COMMAND_SAY, `<p>Alright let's get back to the game.</p>`));
+          break;
+        }
+        case COMMAND_HELP_CONTINUE: {
+          nextCommands.push(createEntry(COMMAND_SAY, `<p>Do you need any more help?</p>`));
+          break;
+        }
+        case COMMAND_RULES_BASIC: {
+          nextCommands.push(createEntry(COMMAND_SAY, `<p>In blackjack you try to get a better hand than me, the dealer.  The best hand has a total value of 21, and the closer you are to 21 without going over the better.</p>`));
+          nextCommands.push(createEntry(COMMAND_SAY, `<p>Begin a round by placing a bet.  You will then be dealt 2 cards and I will get 2 cards.  Cards from 2 to 10 are worth their value.</p>`));
+          break;
+        }
+        case COMMAND_HELP_ADVANCED: {
+          nextCommands.push(createEntry(COMMAND_SAY, `<p>Sure. Let me know if you want to know more about 'Double Down', 'Split' or 'Insurance'.</p>`));
+          break;
+        }
+        case COMMAND_RULES_NATURAL: {
+          nextCommands.push(createEntry(COMMAND_SAY, `If your first 2 cards total 21 then you have blackjack and win.  This is called a natural 21 and you get one and a half times your bet back.`));
+          break;
+        }
+        case COMMAND_RULES_HIT_AND_STAY: {
+          nextCommands.push(createEntry(COMMAND_SAY, `<p>After your 2 initial cards you can decide to hit and get an extra card or stay and keep your total.`));
+          nextCommands.push(createEntry(COMMAND_SAY, `You keep doing this until you either go over 21, or stay.  If you ever go over 21 you bust and lose right away.`));
+          nextCommands.push(createEntry(COMMAND_SAY, `After you stay it's my turn.  I'll reveal both cards and will always hit if my total is less than 17 and will stay on 17 or greater.`));
+          nextCommands.push(createEntry(COMMAND_SAY, `If I don't bust then we compare totals.  If your total is higher without going over 21 you win.  If we tie you get your bet back.</p>`));
+          break;
+        }
+        case COMMAND_RULES_DOUBLE_DOWN: {
+          nextCommands.push(createEntry(COMMAND_SAY, `<p>After your first 2 cards you can always 'Double Down'.  You get to double your bet and you get one (and only one) more card.</p>`));
+          nextCommands.push(createEntry(COMMAND_SAY, `<p>I'd suggest you always double down if your starting total is 11.</p>`));
+          break;
+        }
+        case COMMAND_RULES_SPLIT: {
+          nextCommands.push(createEntry(COMMAND_SAY, `<p>There is also the split. If your first 2 cards are the same you can split them into 2 different hands.  You need to also copy your bet, but then you get to play 2 seperate hands.`));
+          nextCommands.push(createEntry(COMMAND_SAY, `<s>The best time to do this is you get a starting pair of aces.</s></p>`));
+          break;
+        }
+        case COMMAND_RULES_INSURANCE: {
+          nextCommands.push(createEntry(COMMAND_SAY, `<p>Insurance is an option when the dealer is showing an ace.  If you buy insurace you make a side bet of half of your bet and if the dealer does have blackjack then you win your insurance bet but will probably lose your main bet unless you're lucky enough to also have blackjack.</p>`));
+          break;
+        }
+        case COMMAND_RULES_TIPS: {
+          nextCommands.push(createEntry(COMMAND_SAY, `Feel free to ask me for tips while you are playing.`));
+          break;
+        }
+
+
+      }
+    
+    }
+    
+    this.commands = nextCommands;
+  };
+  
+  this.prepOptimizeState = function(conv) {
+    var optimizeState = {
+      singleSpot: conv.data.spot ? (conv.data.spot.length == 1) : true
+    };
+    
+    return optimizeState;
+  };
+  
+  this.optimize = function(optimizeState) {
+    
+    var command;
+    var nextCommands = [];
+    var length = this.commands.length;
+
+    for (var i = 0; i < length; i++) {
+      
+      command = this.commands[i];
+      
+      switch (command.command) {
+        case COMMAND_PLAY_SPOT:
+        case COMMAND_RESULT_CHECK_SPOT:
+        {
+            if (!optimizeState.singleSpot) {
+              nextCommands.push(command);
+            }
+            break;
+        } 
+        default:
+          nextCommands.push(command);
+      }
+    }
+    
+    this.commands = nextCommands;
+  };
+  
+  //#HACK - be careful with user submitted values
+  this.postFilter = function(conv) {
+
+    var command;
+    var nextCommands = [];
+    var length = this.commands.length;
+
+    for (var i = 0; i < length; i++) {
+      
+      command = this.commands[i];
+      if ((command.command === COMMAND_SAY) && (command.data) && (typeof command.data === 'string') && (command.data.length > 0)) {
+        if (command.data.indexOf('total of ') !== -1) {
+          if (Math.random() < 0.06) {
+            command = createEntry(COMMAND_SAY, command.data.replace('total of ', 'total of <sub alias="... mmm... "></sub><break time="500ms"/>'));
+          }
+        }
+      }
+      
+      nextCommands.push(command);
+    }
+    
+    this.commands = nextCommands;
+  };
+  
+  
+  this.ummmFilter = function() {
+
+    var nextCommands = [];
+    var length = this.commands.length;
+    var command0;
+    var command1;
+    var command2;
+
+    for (var i = 0; i < length; i++) {
+      
+      command0 = this.commands[i+0];
+      
+      if (i > 2) {
+      
+        command1 = this.commands[i-1];
+        command2 = this.commands[i-2];
+        
+        if (Math.random() < 0.5) {
+          if ((command0.command === COMMAND_SAY) && (command1.command === COMMAND_SAY) && (command2.command === COMMAND_SAY)) {
+              nextCommands.push(createEntry(COMMAND_SAY, `<sub alias="Ummmmmmm... "></sub>Um. <break time="500ms"/>`));
+          }
+        }
+        
+      }
+      
+      nextCommands.push(command0);
+    }
+    
+    this.commands = nextCommands;
+  };
+  
+  this.process = function() {
+    
+    var conv = this.conv;
+    
+    this.dump();
+    
+    var optState = this.prepOptimizeState(conv);
+    
+    //this.optimize(optState);
+    
+    this.compile();
+    
+    this.postFilter();
+    
+    //this.ummmFilter();
+    
+    this.render(conv);
+    
+    //We currently don't use this
+    //this.renderConfimration(conv);
+    
+    calcSuggestionChips(conv, this);
+    
+    this.renderSuggestionChips(conv);
+
+    //#TODO: Maybe handle context setting here
+  };
+}
+
+//
+/////////////////////////////////////////////////////////
+
+
+var shuffle = function(array) {
+
+	var currentIndex = array.length;
+	var temporaryValue, randomIndex;
+
+	while (currentIndex !== 0) {
+		
+		randomIndex = Math.floor(Math.random() * currentIndex);
+		currentIndex -= 1;
+
+		temporaryValue = array[currentIndex];
+		array[currentIndex] = array[randomIndex];
+		array[randomIndex] = temporaryValue;
+	}
+
+  //#HACK - to force pair
+  //array[array.length - 1] = 1;
+  //array[array.length - 2] = 3;
+  //array[array.length - 3] = 11;
+  //array[array.length - 4] = 5;
+
+	return array;
+};
+
+var talkCard = function(card) {
+  
+  const value = cardValue(card);
+  
+  var response = '';
+  
+  switch (value) {
+    case 1: response = "an ace"; break;
+    case 2: response = "a 2"; break;
+    case 3: response = "a 3"; break;
+    case 4: response = "a 4"; break;
+    case 5: response = "a 5"; break;
+    case 6: response = "a 6"; break;
+    case 7: response = "a 7"; break;
+    case 8: response = "an 8"; break;
+    case 9: response = "a 9"; break;
+    case 10: response = "a 10"; break;
+    case 11: response = "a jack"; break;
+    case 12: response = "a queen"; break;
+    case 13: response = "a king"; break;
+    default: response = "an unknown card"; break;
+  }
+  
+  if (Math.random() < 0.08) {
+    response += ' ' + talkSuit(card);
+  }
+  
+  return response;
+};
+
+
+var talkSuit = function(card) {
+  
+  const suit = cardSuit(card);
+  
+  switch (suit) {
+    case 0: return "of hearts";
+    case 1: return "of spades";
+    case 2: return "of diamonds";
+    case 3: return "of clubs";
+    default: return "an unknown suit";
+  }
+};
+
+var talkCardPair = function(value) {
+  switch (value) {
+    case 1: return "aces";
+    case 2: return "twos";
+    case 3: return "threes";
+    case 4: return "fours";
+    case 5: return "fives";
+    case 6: return "sixes";
+    case 7: return "sevens";
+    case 8: return "eights";
+    case 9: return "nines";
+    case 10: return "tens";   //we use this for splitting to talk about pairs, so we just say tens (by value) here
+    case 11: return "tens";
+    case 12: return "tens";
+    case 13: return "tens";
+    default: return "cards";
+  }
+};
+
+var talkDealerHandDown = function(hand) {
+
+  if ((hand === undefined) || (hand.length === 0)) {
+    return "The dealer has no cards";
+  }
+  
+  return 'The dealer is showing ' + talkCard(hand[0]) + '.';
+};
+
+var talkPlayerHand = function(hand) {
+  console.log('hand: %o', hand);
+  
+  var response = 'You have ';
+
+  //assumes length >= 2
+  for (var i = 0; i < hand.length - 1; i++) {
+    response += talkCard(hand[i]) + ', ';
+  }
+
+  response += 'and ' + talkCard(hand[hand.length - 1]) + '.';
+  
+  return response;
+};
+
+var cardDraw = function(convEng) {
+  
+  var gameData = convEng.gameData();
+  
+  if (gameData.deckIndex <= 0) {
+    
+    //if we are out of cards we quielty get a new deck
+    //#TODO: Don't make it quiet
+    gameData.deck = newDeck();
+  	gameData.deckIndex = gameData.deck.length;
+    
+    convEng.addEvent(COMMAND_PLAY_NEW_DECK);
+    
+  }
+  
+  var deck = gameData.deck;
+  gameData.deckIndex -= 1;
+  
+  return deck[gameData.deckIndex];
+};
+
+const cardAddCard = function(hand, card) {
+  hand.push(card);
+};
+
+const cardValue = function (card) {
+  
+  //cards are saved 1, 2, 3 but code is simplier if it was 0, 1, 2...
+  const value = ((card - 1) % 13) + 1;
+  
+  if (value > 10) {
+    return 10;
+  }
+  
+  return value;  //we always go soft on aces
+};
+
+const cardSuit = function (card) {
+  
+  const suit = Math.floor((card - 1)/ 13);
+  
+  return suit;
+};
+
+var cardTotal = function (hand) {
+  var value;
+  var total = 0;
+  var aceCount = 0;
+    
+  for (var i = 0; i < hand.length; i++) {
+    value = cardValue(hand[i]);
+    if (value == 1) {
+      aceCount += 1;
+    }
+    
+    total += value;
+  }
+  
+  //Handle 'soft aces'
+  //#TODO: not sure best way this should be described 
+  if ((aceCount > 0) && (total <= 11)) {
+    total += 10;
+  }
+  
+  return total;
+};
+
+var isPlayingRound = function(conv) {
+  return (conv.data.inRound === true);
+};
+
+var playingStartRound = function(conv) {
+  conv.data.inRound = true;
+};
+
+var playingEndRound = function(conv) {
+  conv.data.inRound = false;
+};
+
+var isFirstMove = function(conv) {
+  if (!isPlayingRound(conv)) {
+    return false;
+  }
+  
+  return (conv.data.currentSpot === 0) && (conv.data.dealerHand.length == 2) && (conv.data.spot[0].hand.length == 2);
+};
+
+var hasMoreHands = function(conv) {
+  return conv.data.currentSpot < conv.data.spot.length - 1;
+};
+
+var hasMultipleHands = function(conv) {
+  return (conv.data.spot.length > 1);
+};
+
+var playerCanSplit = function(conv) {
+  if (!isPlayingRound(conv)) {
+    return false;
+  }
+  
+  if (conv.data.spot.length > 1) {
+    //we only allow you to split once per round, ie. can't split a split.
+    //This is mostly due to interface issues not functional
+    return false;
+  }
+  
+  var hand = conv.data.spot[conv.data.currentSpot].hand;
+  return hand && (hand.length == 2) && canSplit(hand[0], hand[1]);
+};
+
+var canSplit = function(card1, card2) {
+   return (cardValue(card1) == cardValue(card2));
+};
+
+var testingBJDeck = function(deck) {
+  var i = 51;
+  
+  deck[i--] = 5;     //A/10, nothing
+  deck[i--] = 1;
+  deck[i--] = 5;
+  deck[i--] = 10;
+  
+  deck[i--] = 5;     //A/10, nothing
+  deck[i--] = 1;
+  deck[i--] = 5;
+  deck[i--] = 10;
+  
+  deck[i--] = 5;     //10/A, nothing
+  deck[i--] = 10;
+  deck[i--] = 5;
+  deck[i--] = 1;
+
+  deck[i--] = 1;     //A/10, 21
+  deck[i--] = 1;
+  deck[i--] = 10;
+  deck[i--] = 10;
+  
+  deck[i--] = 1;     //A/10, 21
+  deck[i--] = 1;
+  deck[i--] = 10;
+  deck[i--] = 10;
+
+  deck[i--] = 1;     //10/A, 21
+  deck[i--] = 10;
+  deck[i--] = 10;
+  deck[i--] = 1;
+
+  deck[i--] = 1;     //nothing, 21
+  deck[i--] = 8;
+  deck[i--] = 10;
+  deck[i--] = 8;
+
+  deck[i--] = 5;     //A/nothing, nothing
+  deck[i--] = 1;
+  deck[i--] = 5;
+  deck[i--] = 8;
+  
+  return deck;
+};
+
+var testingSplitBJDeck = function(deck) {
+  var i = 51;
+
+  deck[i--] = 1;     //A/10, splitable Aces
+  deck[i--] = 1;
+  deck[i--] = 1;
+  deck[i--] = 10;
+  
+  deck[i--] = 1;     //10/A, splitable Aces
+  deck[i--] = 10;
+  deck[i--] = 1;
+  deck[i--] = 1;
+  
+  deck[i--] = 1;     //10/A, splitable Aces
+  deck[i--] = 10;
+  deck[i--] = 1;
+  deck[i--] = 1;
+
+  return deck;
+};
+
+var newDeck = function() {
+  
+  var deck = new Array(52);
+  
+  for (var i = 0; i < 13; i++) {
+    for (var j = 0; j < 4; j++) {
+      deck[i*4 + j] = (i*4 + j) + 1;      //+1 because cards are 1, 2, 3 not 0, 1, 2
+    }
+  }
+  
+  deck[51] = 8;
+  deck[49] = 8;
+  
+  var x = shuffle(deck);
+  
+  x[51] = 8;
+  x[49] = 8;
+  x[47] = 8;
+
+  //BJ testing
+  x = testingBJDeck(x);
+  
+  return x;
+};
+
+var makeBet = function(convEng, amount) {
+  //Note that we remove the bet now which will cause the player to lose
+  //money if they end the game, but will also prevent players from
+  //leaving without lose during bad hands
+  convEng.setChips(convEng.getChips() - amount); 
+  convEng.conv.data.bet = amount;
+};
+
+//#TODO: we don't handle any error handling
+var makeDouble = function(convEng) {
+  convEng.setChips(convEng.getChips() - 1.0 * gameData.bet);
+  
+  var gameData = convEng.gameData();
+  gameData.bet *= 2;
+};
+
+var makeResultWin = function(convEng, spot, scale) {
+  //scale is used in naturals so that you can win 2.0 times your bet
+  if (scale === undefined) {
+    scale = 1.0;
+  }
+  
+  var gameData = convEng.gameData();
+  
+  //make sure we don't include half chips
+  var increase = 1.0 * Math.floor(gameData.spot[spot].bet * (1.0 + scale));
+  
+  convEng.setChips(convEng.getChips() + increase);
+  gameData.spot[spot].bet = 0;
+  
+  var stats = convEng.stats();
+  stats.wins += 1;
+  stats.winStreaks += 1;
+  stats.loseStreaks = 0;
+  stats.chipsWon += increase;
+};
+
+var makeResultLose = function(convEng, spot) {
+  var gameData = convEng.gameData();
+  
+  var stats = convEng.stats();
+  stats.loses += 1;
+  stats.winStreaks = 0;
+  stats.loseStreaks += 1;
+  stats.chipsLost += gameData.spot[spot].bet;
+
+  gameData.spot[spot].bet = 0;
+};
+
+var makeResultPush = function(convEng, spot) {
+  var gameData = convEng.gameData();
+  
+  var stats = convEng.stats();
+  stats.ties += 1;
+  stats.winStreaks = 0;
+  stats.loseStreaks = 0;
+
+  //*1.0 just to make sure it's converted to a number
+  convEng.setChips(convEng.getChips() + 1.0 * gameData.spot[spot].bet);
+  gameData.spot[spot].bet = 0;
+};
+
+var startGame = function(convEng) {
+  
+  var gameData = convEng.gameData();
+  
+  gameData.deck = newDeck();
+  gameData.deckIndex = gameData.deck.length;
+  //Kept for debuging
+  //gameData.chips = 100;
+  
+  gameData.stats = new Stats();
+};
+
+var startRound = function(convEng) {
+  
+  var gameData = convEng.gameData();
+  
+  gameData.spotCount = START_HAND_COUNT;
+  gameData.spot = [];
+  gameData.currentSpot = -1; 
+  
+  var card;
+  var spotCount = gameData.spotCount;
+  var i;
+  
+  for (i = 0; i < spotCount; i++) {
+  
+    gameData.spot[i] = {
+      bet: gameData.bet,    //same bet for all spots
+      hand: [],
+      handStatus: HAND_STATUS_WAITING
+    };
+    
+    card = cardDraw(convEng);
+    cardAddCard(gameData.spot[i].hand, card);
+    
+    convEng.addEvent(COMMAND_PLAY_SPOT, {spot:i});
+    convEng.addEvent(COMMAND_FIRST_CARD, {hand:card});
+  }
+  
+  var dealerHand = [];
+  
+  card = cardDraw(convEng);
+  cardAddCard(dealerHand, card);
+  
+  convEng.addEvent(COMMAND_DEALER_UP_CARD, card);
+  
+  for (i = 0; i < spotCount; i++) {
+  
+    card = cardDraw(convEng);
+    cardAddCard(gameData.spot[i].hand, card);
+    
+    convEng.addEvent(COMMAND_PLAY_SPOT, {spot:i});
+    convEng.addEvent(COMMAND_SECOND_CARD, {hand:card});
+  }
+
+  //Hole card
+  card = cardDraw(convEng);
+  cardAddCard(dealerHand, card);
+
+  convEng.addEvent(COMMAND_DEALER_DOWN_CARD);
+
+  gameData.dealerHand = dealerHand;
+};
+
+var checkPayDay = function(convEng) {
+  
+  var storage = convEng.userStorage();
+
+  const CHIPS_AT_START = 100;
+  const CHIPS_PER_DAY = 100;
+  
+  var d = new Date();
+  //const millisInDay = (1000 * 60 * 60 * 24);
+  const millisInDay = (1000 * 30);
+  
+  const currentDay = Math.trunc(d.getTime() / millisInDay);
+  
+  console.log('checkPayDay %d -> %d', storage.lastPayDay, currentDay);
+  
+  if ((storage.lastPayDay === undefined) || isNaN(storage.lastPayDay)) {
+    storage.lastPayDay = currentDay;
+    convEng.setChips(CHIPS_AT_START);
+    convEng.addEvent(COMMAND_FIRST_DAILY_CHIPS, {add:CHIPS_AT_START, total:convEng.getChips()});
+  } else {
+    if (storage.lastPayDay < currentDay) {
+      storage.lastPayDay = currentDay;
+      convEng.setChips(convEng.getChips() + CHIPS_PER_DAY);
+      convEng.addEvent(COMMAND_ADD_DAILY_CHIPS, {add:CHIPS_PER_DAY, total:convEng.getChips()});
+    } else {
+      //Nothing?
+      //convEng.addEvent(COMMAND_NO_DAILY_CHIPS, {add:CHIPS_PER_DAY, total:convEng.getChips()});
+    }
+  }
+
+};
+
+var advance = function(conv, convEng) {
+  
+  if (conv.data.currentSpot < conv.data.spot.length - 1) {
+    var gameData = convEng.gameData();
+    
+    var spot = gameData.currentSpot;
+    spot += 1;
+    
+    gameData.spot[spot].handStatus = HAND_STATUS_INPLAY;
+    gameData.currentSpot = spot;
+        
+    convEng.addEvent(COMMAND_PLAY_SPOT, {spot: spot});
+    
+    const nextHand = gameData.spot[spot].hand;
+    convEng.addEvent(COMMAND_DESCRIBE_PLAYER_HAND, nextHand);
+    
+  } else {
+    dealerPlaysOut(conv, convEng);
+  }
+
+};
+
+var dealerPlaysOut = function(conv, convEng) {
+  
+  var stayCount = 0;
+  
+  var i;
+  
+  var gameData = convEng.gameData();
+  
+  for (i = 0; i < conv.data.spotCount; i++) {
+    if (conv.data.spot[i].handStatus == HAND_STATUS_STAY) {
+      stayCount += 1;
+    }
+  }
+
+  //if everyone is done, dealer doesn't need to do anything
+  if (stayCount === 0) {
+    playingEndRound(conv);
+    convEng.addEvent(COMMAND_MOVE_DEALER_NO_PLAY);
+    finishRound(convEng);        
+    return;
+  }
+
+  var dealerCard = conv.data.dealerHand[1];
+  
+  //response += '. Dealer flips over ' + talkCard(overCard) + '.';
+  var houseTotal = cardTotal(conv.data.dealerHand);
+  
+  convEng.addEvent(COMMAND_MOVE_DEALER_REVEAL, {card: dealerCard, total: houseTotal});
+  
+  while (houseTotal < 17) {
+    //response += ' Dealer is at ' + houseTotal + '. Dealer draws ';
+    dealerCard = cardDraw(convEng);
+    cardAddCard(conv.data.dealerHand, dealerCard);
+    //response += talkCard(dealerCard) + '.';
+    
+    houseTotal = cardTotal(conv.data.dealerHand);
+    
+    convEng.addEvent(COMMAND_MOVE_DEALER_DRAW, {card: dealerCard, total: houseTotal});
+  }
+  
+  if (houseTotal > 21) {
+    convEng.addEvent(COMMAND_MOVE_DEALER_BUST);
+    
+    for (i = 0; i < conv.data.spotCount; i++) {
+      if (conv.data.spot[i].handStatus == HAND_STATUS_STAY) {
+        convEng.addEvent(COMMAND_RESULT_DEALER_BUST, {spot: i});
+        makeResultWin(convEng, i);
+      }
+    }
+    
+  } else {
+    
+    convEng.addEvent(COMMAND_MOVE_DEALER_STAY, {total: houseTotal});
+
+    var hand;
+    var playerTotal;
+
+    for (i = 0; i < conv.data.spotCount; i++) {
+      if (conv.data.spot[i].handStatus == HAND_STATUS_STAY) {
+        convEng.addEvent(COMMAND_RESULT_CHECK_SPOT, {spot: i});
+        
+        hand = conv.data.spot[i].hand;
+        playerTotal = cardTotal(hand);
+        
+        if (houseTotal < playerTotal) {
+          convEng.addEvent(COMMAND_RESULT_COMPARE_WIN, {hand:hand, total:playerTotal});
+          makeResultWin(convEng, i);
+        } else if (houseTotal > playerTotal) {
+          convEng.addEvent(COMMAND_RESULT_COMPARE_LOSE, {hand:hand, total:playerTotal});
+          makeResultLose(convEng, i);
+        } else { 
+          convEng.addEvent(COMMAND_RESULT_COMPARE_PUSH, {hand:hand, total:playerTotal});
+          makeResultPush(convEng, i);
+        }
+      }
+    }
+    
+  }
+  
+  playingEndRound(conv);
+  finishRound(convEng);
+    
+};
+
+var finishRound = function(convEng) {
+  
+  convEng.addEvent(COMMAND_ROUND_END);
+  
+  //We don't want to overwelm the player, so we only check for new chips if
+  //not much is happening
+  if (convEng.isConversationShort() || (convEng.getChips() <= 0)) {
+    checkPayDay(convEng);
+  }
+
+  if (convEng.getChips() <= 0) {
+    convEng.addEvent(COMMAND_OUT_OF_CHIPS);
+  }
+
+};
+
+var finishInsurance = function(conv, convEng, canBuyInsurance, buyInsurance) {
+  var insuranceBet = 0;
+  if (canBuyInsurance) {
+    if (buyInsurance) {
+      insuranceBet = (Math.floor(conv.data.bet/2));
+      convEng.setChips(convEng.getChips() - insuranceBet);
+      convEng.addEvent(COMMAND_PLAY_INSURANCE_ACCEPTED, insuranceBet);
+    } else {
+      convEng.addEvent(COMMAND_PLAY_INSURANCE_DECLINED);
+    }
+  } 
+
+  //dealer now checks if they have a ten value in the hole
+  const valueShown = cardValue(conv.data.dealerHand[0]);
+  if (valueShown == 1) {
+    convEng.addEvent(COMMAND_PLAY_DEALER_PEAKS);
+  }
+  
+  var dealerTotal = cardTotal(conv.data.dealerHand);
+  var playerTotal = 0;
+  
+  var i;
+
+  if (dealerTotal == 21) {
+    convEng.addEvent(COMMAND_NATURAL_DEALER);
+    
+    if (insuranceBet > 0) {
+      convEng.addEvent(COMMAND_PLAY_INSURANCE_PAYS_OFF);
+      convEng.setChips(convEng.getChips() + (2.0 * insuranceBet));
+    }
+    
+    for (i = 0; i < conv.data.spotCount; i++) {
+      
+      convEng.addEvent(COMMAND_RESULT_CHECK_SPOT, {spot: i});
+      
+      playerTotal = cardTotal(conv.data.spot[i].hand);
+      
+      if (playerTotal == 21) {
+        //Push
+        convEng.addEvent(COMMAND_RESULT_NATURAL_PUSH);
+        makeResultPush(convEng, i);
+      } else {
+        convEng.addEvent(COMMAND_RESULT_NATURAL_DEALER);
+        makeResultLose(convEng, i);
+      }
+    }
+    
+    playingEndRound(conv);
+    finishRound(convEng);
+    
+  } else {
+      if (canBuyInsurance) {
+        convEng.addEvent(COMMAND_PLAY_INSURANCE_NOT_NEEDED);
+      } else {
+        convEng.addEvent(COMMAND_PLAY_DEALER_NO_NATURAL);
+      }
+        
+      if (canBuyInsurance) {
+        if (insuranceBet > 0) {
+          convEng.addEvent(COMMAND_PLAY_INSURANCE_COLLECTED);
+        }
+      }
+      
+      var naturalCount = 0;
+      
+      for (i = 0; i < conv.data.spot.length; i++) {
+        
+        convEng.addEvent(COMMAND_RESULT_CHECK_SPOT, {spot: i});
+        
+        playerTotal = cardTotal(conv.data.spot[i].hand);
+        
+        if (playerTotal == 21) {
+          //Push
+          convEng.addEvent(COMMAND_RESULT_NATURAL_PLAYER, {spot:i});
+          
+          makeResultWin(convEng, i, 2.0);    //21 pays 2x
+          conv.data.spot[i].handStatus = HAND_STATUS_NATURAL_21;
+          naturalCount += 1;
+        } 
+      }
+      
+      //if all players had naturals then dealer is done
+      if (naturalCount == conv.data.spot.length) {
+        //dealer shouldn't do anything, but just going to call this to finish up
+        dealerPlaysOut(conv, convEng);
+      }
+    
+  }
+  
+  //Insurance has now passed - no need to accept answers regarding it
+  conv.contexts.delete('insurance_question');
+  
+};
+
+//Uggg - context can be in 2 different places - output or input
+//there's no nice way to access output so we just go straight to the var
+//
+//output is what is used next frame, if there's nothing set the input is used
+//with lifespan -= 1;
+var willContextBeSet = function(conv, contextName) {
+  const outputContext = conv.contexts.output[contextName];
+  if (outputContext !== undefined) {
+    return (outputContext.lifespan > 0);
+  }
+
+  const inputContext = conv.contexts.get(contextName);
+  if (inputContext !== undefined) {
+    return (inputContext.lifespan > 0);
+  }
+  
+  return false;
+};
+
+var calcSuggestionChips = function(conv, convEng) {
+
+  console.log('contexts %o', conv.contexts);
+
+  const helpContext = willContextBeSet(conv, 'help');
+  if (helpContext ) {
+    //#TODO: need to remove calcSuggestionChips - and make it work like Help uses it
+    return;
+  }
+
+  if (!isPlayingRound(conv)) {
+    
+    var suggestedBet = conv.data.previousBet;
+    if ((suggestedBet === undefined) || (suggestedBet === 0)) {
+      suggestedBet = 10;
+    }
+    
+    if (suggestedBet > convEng.getChips()) {
+      suggestedBet = convEng.getChips();
+    }
+    
+    if (suggestedBet > 0) {
+      convEng.addEvent(COMMAND_SUGGEST, 'Bet ' + suggestedBet);
+      convEng.addEvent(COMMAND_SUGGEST, 'How many chips?');
+    } else {
+      convEng.addEvent(COMMAND_SUGGEST, 'Goodbye');
+    }
+    
+    return;
+  }
+  
+  if (isFirstMove(conv)) {
+    const insuranceContext = willContextBeSet(conv, 'insurance_question');
+    if (insuranceContext) {
+      convEng.addEvent(COMMAND_SUGGEST, 'Buy Insurance');
+    }
+    
+    convEng.addEvent(COMMAND_SUGGEST, 'Hit');
+    convEng.addEvent(COMMAND_SUGGEST, 'Stay');
+    
+    if (convEng.getChips() > conv.data.bet) {
+      if (playerCanSplit(conv)) {
+        convEng.addEvent(COMMAND_SUGGEST, 'Split');
+      }
+
+      convEng.addEvent(COMMAND_SUGGEST, 'Double Down');
+    }
+    
+  } else {
+    
+    const playerTotal = cardTotal(conv.data.spot[conv.data.currentSpot].hand);
+    
+    if (playerTotal < 21) {
+      convEng.addEvent(COMMAND_SUGGEST, 'Hit');
+    }
+    convEng.addEvent(COMMAND_SUGGEST, 'Stay');
+  }
+
+  if (Math.random() < 0.1) {
+    if (Math.random() < 0.5) {
+      convEng.addEvent(COMMAND_SUGGEST, 'Tip');
+    } else if (Math.random() < 0.6) {
+      convEng.addEvent(COMMAND_SUGGEST, 'How many chips?');
+    } else {
+      convEng.addEvent(COMMAND_SUGGEST, 'Describe hands');
+    }
+  }
+
+};
+
+///////////////////////////////////////////////////////
+// Intentions
+
+// Start up
+app.intent('Default Welcome Intent', (conv, {amount}) => {
+  
+  var convEng = new ConvEng(conv);
+  
+  startGame(convEng);
+  
+  convEng.addEvent(COMMAND_WELCOME);
+  checkPayDay(convEng);
+  
+  convEng.process();
+});
+
+var doBet = function(conv, amount) {
+
+  var convEng = new ConvEng(conv);
+
+  var response = '';
+  if (amount === undefined) {
+    amount = convEng.getChips();
+  }
+
+  if (isPlayingRound(conv)) {
+    convEng.addEvent(COMMAND_BET_INSIDE_GAME);
+    convEng.process();
+    return;
+  } 
+
+  if (isNaN(amount)) {
+    convEng.addEvent(COMMAND_BET_NAN);
+    convEng.process();
+    return;
+  }
+
+  //This probably isn't possible any more since we now use parseInt above
+  if (!Number.isInteger(amount)) {
+
+    convEng.addEvent(COMMAND_BET_NOT_AN_INTEGER, amount);
+    convEng.process();
+    return;
+  }    
+
+  if (amount <= 0) {
+    convEng.addEvent(COMMAND_BET_TOO_LOW, amount);
+    convEng.process();
+    return;
+  }
+
+  if (amount > convEng.getChips()) {
+    convEng.addEvent(COMMAND_BET_CANT_COVER, {bet: amount, stack: conv.data.chips});
+    convEng.process();
+    return;
+  } 
+
+  if (amount == convEng.getChips()) {
+    convEng.addEvent(COMMAND_BET_ALL, amount);
+  } else {
+    convEng.addEvent(COMMAND_BET, amount);
+  }
+  
+  var stats = convEng.stats();
+  
+  stats.roundsPlayed += 1;
+  stats.maxBet = Math.max(stats.maxBet, amount);
+  stats.minChips = Math.min(stats.minChips, convEng.getChips());
+  stats.maxChips = Math.max(stats.maxChips, convEng.getChips());
+  
+  //Save last bet so it's easier to do next time
+  conv.data.previousBet = amount;
+  
+  playingStartRound(conv);
+  
+  makeBet(convEng, amount);
+  
+  startRound(convEng);
+  advance(conv, convEng);    //Move to first spot
+
+  convEng.addEvent(COMMAND_ROUND_START);
+  
+  var dealerHand = conv.data.dealerHand;
+  
+  var playerTotal;
+  var dealerTotal = cardTotal(dealerHand);
+  
+  const valueShown = cardValue(dealerHand[0]);
+  //Check if dealer is showing an ace.  Ask about insurance
+  if (valueShown == 1)  {
+    if (amount > 1) {
+      if (convEng.getChips() > (amount * 0.5)) {
+        convEng.addEvent(COMMAND_PLAY_INSURANCE_ASK);
+        conv.contexts.set('insurance_question', 5);
+        convEng.process();
+        //User now needs to respond to insurrance question
+        return;
+      } else {
+        convEng.addEvent(COMMAND_PLAY_INSURANCE_BET_CANT_COVER);
+        finishInsurance(conv, convEng, false, false);
+      }
+    } else {
+      convEng.addEvent(COMMAND_PLAY_INSURANCE_BET_TOO_LOW);
+      finishInsurance(conv, convEng, false, false);
+    }
+  }
+
+  //if dealer is showing a ten then dealer now checks if they have an ace in the hole
+  if (valueShown == 10) {
+    convEng.addEvent(COMMAND_PLAY_DEALER_PEAKS);
+  }
+
+  if (dealerTotal === 21) {
+    //Dealer has natural but the 10 is showing - no insurance options
+    finishInsurance(conv, convEng, false, false);
+  } else {
+  
+    var naturalCount = 0;
+    
+    var i;
+    
+    for (i = 0; i < conv.data.spot.length; i++) {
+      
+      convEng.addEvent(COMMAND_RESULT_CHECK_SPOT, {spot: i});
+      
+      playerTotal = cardTotal(conv.data.spot[i].hand);
+      
+      if (playerTotal == 21) {
+        convEng.addEvent(COMMAND_RESULT_NATURAL_PLAYER);
+        makeResultWin(convEng, i, 2);    //21 pays 2x times
+        conv.data.spot[i].handStatus = HAND_STATUS_NATURAL_21;
+        naturalCount += 1;
+        
+        //??
+        makeResultPush(convEng, i);
+      }
+    }
+    
+    //Check if player won everything alreay
+    if (naturalCount == conv.data.spot.length) {
+      //dealer shouldn't do anything, but just going to call this to finish up
+      dealerPlaysOut(conv, convEng);
+    }
+  }
+    
+  convEng.process();
+};
+
+app.intent('Bet', (conv) => {
+  const amount = parseInt(conv.parameters.number);
+  doBet(conv, amount);
+});
+
+app.intent('All In', (conv) => {
+    doBet(conv);
+});
+
+// An in game move
+app.intent('Move', (conv) => {
+
+  var convEng = new ConvEng(conv);
+
+  if (!isPlayingRound(conv)) {
+    convEng.addEvent(COMMAND_MOVE_OUTSIDE_GAME);
+    convEng.addEvent(COMMAND_ASK_BET);
+    convEng.process();
+    return;
+  }
+
+  var context = conv.contexts.get('insurance_question');
+  if (context !== undefined) {
+    
+    finishInsurance(conv, convEng, true, false);
+    
+    if (!conv.data.inRound) {
+      //round ended because someone got a natural
+      convEng.process();
+      return;
+    }
+  }
+
+
+  var currentSpot = conv.data.currentSpot;
+  var hand = conv.data.spot[currentSpot].hand;
+  var playerTotal;
+  var nextCard;
+  var overCard;
+  var houseTotal;
+  var dealerCard;
+  
+  var command = conv.parameters.Move;
+  if (command === 'hit') {
+    nextCard = cardDraw(convEng);
+    
+    //response = 'You draw ' + talkCard(nextCard);
+    
+    cardAddCard(hand, nextCard);
+    playerTotal = cardTotal(hand);
+    
+    //response += '. You have a total of ' + playerTotal + ".";
+
+    convEng.addEvent(COMMAND_MOVE_DRAW, {card:nextCard, total: playerTotal});
+    
+    if (playerTotal > 21) {
+      convEng.addEvent(COMMAND_MOVE_BUST);
+      conv.data.spot[currentSpot].handStatus = HAND_STATUS_BUST;
+
+      advance(conv, convEng);
+    }
+    
+    convEng.process();
+    
+  } else if (command == 'stay') {
+    playerTotal = cardTotal(hand);
+    convEng.addEvent(COMMAND_MOVE_STAY, {total: playerTotal});
+    conv.data.spot[currentSpot].handStatus = HAND_STATUS_STAY;
+    
+    advance(conv, convEng);
+
+    convEng.process();
+    
+  } else if (command == 'double') {
+    
+    if (hand.length != 2) {
+      convEng.addEvent(COMMAND_MOVE_DOUBLE_NOT_FIRST);
+      convEng.process();
+    } else if (convEng.getChips() < conv.data.bet) {
+      convEng.addEvent(COMMAND_MOVE_DOUBLE_CANT_COVER, {bet: conv.data.bet, stack:convEng.getChips()});
+      convEng.process();
+    } else {
+    
+      convEng.addEvent(COMMAND_MOVE_DOUBLE, {bet: conv.data.bet});
+      makeDouble(convEng);
+       
+      nextCard = cardDraw(convEng);
+      
+      cardAddCard(hand, nextCard);
+      playerTotal = cardTotal(hand);
+      
+      convEng.addEvent(COMMAND_MOVE_DRAW, {card: nextCard, total:playerTotal});
+      
+      if (playerTotal > 21) {
+        convEng.addEvent(COMMAND_MOVE_BUST);
+        conv.data.spot[currentSpot].handStatus = HAND_STATUS_BUST;
+        makeResultLose(convEng, currentSpot);
+        
+      } else {
+        conv.data.spot[currentSpot].handStatus = HAND_STATUS_STAY;
+      }
+      
+      advance(conv, convEng);
+
+      convEng.process();
+    }
+  } else if (command === 'split') {
+    if (hand.length != 2) {
+      convEng.addEvent(COMMAND_MOVE_SPLIT_NOT_FIRST);
+      convEng.process();
+    } else if (!canSplit(hand[0], hand[1])) { 
+      convEng.addEvent(COMMAND_MOVE_SPLIT_NOT_PAIR, hand);
+      convEng.process();
+    } else if (conv.data.spot.length > 1) {
+      convEng.addEvent(COMMAND_MOVE_SPLIT_ONLY_ONCE, hand);
+      convEng.process();
+    } else if (convEng.getChips() < conv.data.bet) {
+      convEng.addEvent(COMMAND_MOVE_SPLIT_CANT_COVER, {bet: conv.data.bet, stack:convEng.getChips()});
+      convEng.process();
+    } else {
+      convEng.addEvent(COMMAND_MOVE_SPLIT, {hand:hand, bet: conv.data.bet});
+      
+      var nextHand = [hand.pop()];
+      
+      var splitSpot = {
+        bet: conv.data.bet,   //same bet for all spots
+        hand: nextHand,
+        handStatus: HAND_STATUS_WAITING
+      };
+        
+      conv.data.spot.splice(currentSpot + 1, 0, splitSpot);
+
+      nextCard = cardDraw(convEng);
+      cardAddCard(hand, nextCard);
+      playerTotal = cardTotal(hand);
+      
+      convEng.addEvent(COMMAND_MOVE_SPLIT_DRAW, {hand: hand, total:playerTotal, pairIndex:0});
+      
+      nextCard = cardDraw(convEng);
+      cardAddCard(nextHand, nextCard);
+      var playerNextTotal = cardTotal(nextHand);
+      
+      convEng.addEvent(COMMAND_MOVE_SPLIT_DRAW, {hand: nextHand, total:playerNextTotal, pairIndex:1});
+      
+      convEng.addEvent(COMMAND_MOVE_SPLIT_FINISHED, {hand: hand, total:playerTotal, pairIndex:0});
+      
+      convEng.process();
+    }
+    
+  } else {
+    
+    conv.ask("Sorry - unknown command");
+    
+  }
+    
+});
+ 
+app.intent('Describe', (conv, {color}) => {
+  var convEng = new ConvEng(conv);
+  
+  if (!isPlayingRound(conv)) {
+    convEng.addEvent(COMMAND_DESCRIBE_OUT_OF_GAME, convEng.getChips());
+    convEng.addEvent(COMMAND_ASK_BET);
+    convEng.process();
+    return;
+  }
+
+  var hand = conv.data.spot[conv.data.currentSpot].hand;
+  var dealerHand = conv.data.dealerHand;
+
+  const playerHand = conv.data.spot[conv.data.currentSpot].hand;
+
+  convEng.addEvent(COMMAND_DESCRIBE_DEALER_HAND, {hand:dealerHand});
+  convEng.addEvent(COMMAND_DESCRIBE_PLAYER_HAND, playerHand);
+  convEng.addEvent(COMMAND_DESCRIBE_PLAYER_TOTAL, {playerTotal:cardTotal(playerHand)});
+  
+
+  convEng.process();
+});
+
+
+app.intent('Chips Available', (conv) => {
+  
+  var convEng = new ConvEng(conv);
+  
+  convEng.addEvent(COMMAND_COUNT_CHIPS, convEng.getChips());
+  
+  if (!isPlayingRound(conv)) {
+    convEng.addEvent(COMMAND_ASK_BET);
+    convEng.process();
+    return;
+  }
+  
+  convEng.process();
+});
+
+app.intent('Describe Bet', (conv) => {
+
+  var convEng = new ConvEng(conv);
+  
+  if (!isPlayingRound(conv)) {
+    convEng.addEvent(COMMAND_DESCRIBE_BET_OUTSIDE_GAME);
+    convEng.addEvent(COMMAND_COUNT_CHIPS, convEng.getChips());
+    convEng.addEvent(COMMAND_ASK_BET);
+  } else {
+    convEng.addEvent(COMMAND_DESCRIBE_BET, conv.data.bet);
+  }
+  
+  convEng.process();
+});
+
+app.intent('Describe Stats', (conv) => {
+  var convEng = new ConvEng(conv);
+  convEng.addEvent(COMMAND_DESCRIBE_STATS, convEng.stats());
+  convEng.addEvent(COMMAND_DESCRIBE_STATS_CHIPS, convEng.stats());
+  convEng.process();
+});
+
+app.intent('Describe Total', (conv) => {
+
+  var convEng = new ConvEng(conv);
+  
+   if (!isPlayingRound(conv)) {
+    convEng.addEvent(COMMAND_DESCRIBE_OUT_OF_GAME, convEng.getChips());
+    convEng.addEvent(COMMAND_ASK_BET);
+    convEng.process();
+    return;
+  }
+
+  const hand = conv.data.spot[conv.data.currentSpot].hand;
+  const playerTotal = cardTotal(hand);
+  const dealerTotal = cardTotal(conv.data.dealerHand);
+
+  convEng.addEvent(COMMAND_DESCRIBE_PLAYER_TOTAL, {playerTotal:playerTotal});
+
+  convEng.process();
+});
+
+app.intent('Describe Dealer Card', (conv) => {
+
+  var convEng = new ConvEng(conv);
+  
+   if (!isPlayingRound(conv)) {
+    convEng.addEvent(COMMAND_DESCRIBE_OUT_OF_GAME, convEng.getChips());
+    convEng.addEvent(COMMAND_ASK_BET);
+    convEng.process();
+    return;
+  }
+
+  var dealerHand = conv.data.dealerHand;
+  convEng.addEvent(COMMAND_DESCRIBE_DEALER_HAND, {hand:dealerHand});
+
+  convEng.process();
+});
+
+app.intent('Tip', (conv, {color}) => {
+  
+  var convEng = new ConvEng(conv);
+  
+  if (!isPlayingRound(conv)) {
+    convEng.addEvent(COMMAND_TIP_OUTSIDE_GAME);
+    convEng.addEvent(COMMAND_COUNT_CHIPS, convEng.getChips());
+    convEng.addEvent(COMMAND_ASK_BET);
+    convEng.process();
+    return;
+  }
+
+  var tip = '';
+  
+  var currentSpot = conv.data.currentSpot;
+  var hand = conv.data.spot[currentSpot].hand;
+  var playerTotal = cardTotal(hand);
+  
+  var dealerValue = cardValue(conv.data.dealerHand[0]);
+  
+  var twoCardsWithAce = false;
+  var pair = false;
+  
+  if (hand.length == 2) {
+    
+    for (var i = 0; i < hand.length; i++) {
+      if (cardValue(hand[i]) == 1) {
+        twoCardsWithAce = true;
+      }
+    }
+    
+    if (canSplit(hand[0], hand[1])) {
+      pair = true;
+    }
+  }
+  
+  if (pair) {
+    
+    var singleValue;
+    
+    if (twoCardsWithAce) {
+      singleValue = 1;    //Nice! pair of aces
+    } else {
+      singleValue = playerTotal / 2;
+    }
+    
+    tip = tipChartPairs[singleValue - 1][dealerValue - 1];
+  } else if (twoCardsWithAce) {
+    var totalMinusAce = playerTotal - 11;
+    tip = tipChartWithAce[totalMinusAce - 1][dealerValue - 1];
+  } else {
+    tip = tipChartBasic[playerTotal - 1][dealerValue - 1];
+  }
+
+  console.log('Tip ' + playerTotal + ',' + dealerValue + ':' + tip);
+
+  switch (tip) {
+    case 'S': convEng.addEvent(COMMAND_TIP, 'stand'); break;
+    case 'H': convEng.addEvent(COMMAND_TIP, 'hit');  break;
+    case 'D': convEng.addEvent(COMMAND_TIP, 'double');  break;
+    case 'P': convEng.addEvent(COMMAND_TIP, 'split'); break;
+    default: convEng.addEvent(COMMAND_TIP, 'unknown'); break;
+  }
+  
+  convEng.process();
+});
+
+app.intent('Insurance', (conv) => {
+  
+  var convEng = new ConvEng(conv);
+  
+  //We are only really supporting insurance for all spots or no spots
+  //fix this if we ever go multiplayer
+  const context = conv.contexts.get('insurance_question');
+  
+  const reply = conv.parameters.insurance_confimration;
+  if (reply == 'yes') {
+    finishInsurance(conv, convEng, true, true);
+  } else {
+    finishInsurance(conv, convEng, true, false);
+  } 
+  
+  convEng.process();
+});
+
+app.intent('Help', (conv) => {
+  var convEng = new ConvEng(conv);
+  convEng.addEvent(COMMAND_HELP_BASIC_OR_ADVANCE);
+  if (Math.random() < 0.3) {
+    convEng.addEvent(COMMAND_RULES_TIPS);
+  }
+  
+  convEng.addEvent(COMMAND_SUGGEST, 'Basic');
+  convEng.addEvent(COMMAND_SUGGEST, 'Advanced');
+  convEng.process();
+  
+  conv.contexts.set('help', 5);
+});
+
+app.intent('Help_Basic', (conv, params) => {
+  var convEng = new ConvEng(conv);
+  convEng.addEvent(COMMAND_RULES_BASIC); 
+  //convEng.addEvent(COMMAND_RULES_HIT_AND_STAY);
+  //convEng.addEvent(COMMAND_RULES_TIPS);
+  //convEng.addEvent(COMMAND_CONFIRMATION, `Do you need any more help?`);
+  convEng.addEvent(COMMAND_HELP_CONTINUE);
+  
+  convEng.addEvent(COMMAND_SUGGEST, 'Yes');  
+  convEng.addEvent(COMMAND_SUGGEST, 'No');  
+  
+  convEng.process();
+  
+  conv.contexts.set('help', 5);
+  conv.contexts.set('help_continue', 5);
+});
+
+app.intent('Help_Advanced', (conv, params) => {
+  var convEng = new ConvEng(conv);
+  convEng.addEvent(COMMAND_HELP_ADVANCED);
+  convEng.addEvent(COMMAND_SUGGEST, 'Double Down');
+  convEng.addEvent(COMMAND_SUGGEST, 'Split');
+  convEng.addEvent(COMMAND_SUGGEST, 'Insurance');
+  convEng.addEvent(COMMAND_SUGGEST, 'Basic');
+  convEng.process();
+  
+  conv.contexts.set('help', 5);
+});
+
+app.intent('Help_Move', (conv, params) => {
+  var convEng = new ConvEng(conv);
+  
+  var command = conv.parameters.Move;
+  if ((command === 'hit') || (command === 'stay')) {
+    convEng.addEvent(COMMAND_RULES_HIT_AND_STAY);
+  } else if (command === 'double') {
+    convEng.addEvent(COMMAND_RULES_DOUBLE_DOWN);
+  } else if (command === 'split') {
+    convEng.addEvent(COMMAND_RULES_SPLIT);
+  }
+
+  convEng.addEvent(COMMAND_HELP_CONTINUE);
+  
+  convEng.addEvent(COMMAND_SUGGEST, 'Yes');  
+  convEng.addEvent(COMMAND_SUGGEST, 'No');  
+  
+  conv.contexts.set('help', 5);
+  conv.contexts.set('help_continue', 5);
+
+  convEng.process();
+});
+
+app.intent('Help_Insurance', (conv, params) => {
+  var convEng = new ConvEng(conv);
+  convEng.addEvent(COMMAND_RULES_INSURANCE);
+  convEng.addEvent(COMMAND_HELP_CONTINUE);
+  convEng.addEvent(COMMAND_SUGGEST, 'Yes');  
+  convEng.addEvent(COMMAND_SUGGEST, 'No');  
+  
+  convEng.process();
+  
+  conv.contexts.set('help', 5);
+  conv.contexts.set('help_continue', 5);
+});
+
+app.intent('Help_Continue_Confirmation', (conv, params) => {
+  var convEng = new ConvEng(conv);
+  
+  if (conv.parameters.YesNo === 'Yes') {
+    convEng.addEvent(COMMAND_HELP_STAY);
+    
+    if (Math.random() < 0.3) {
+      convEng.addEvent(COMMAND_RULES_TIPS);
+    }
+    
+    convEng.addEvent(COMMAND_SUGGEST, 'Basic');
+    convEng.addEvent(COMMAND_SUGGEST, 'Advanced');
+    
+    conv.contexts.set('help', 5);
+    conv.contexts.delete('help_continue');
+  } else {
+    convEng.addEvent(COMMAND_HELP_EXIT);
+
+    if (!isPlayingRound(conv)) {
+      convEng.addEvent(COMMAND_ASK_BET);
+    } else {
+      var hand = conv.data.spot[conv.data.currentSpot].hand;
+      var dealerHand = conv.data.dealerHand;
+
+      convEng.addEvent(COMMAND_DESCRIBE_DEALER_HAND, {hand:dealerHand});
+      convEng.addEvent(COMMAND_DESCRIBE_PLAYER_HAND, conv.data.spot[conv.data.currentSpot].hand);
+    }
+
+    conv.contexts.delete('help');
+    conv.contexts.delete('help_continue');
+  }
+  convEng.process();
+});
+
+
+app.intent('About', (conv) => {
+  var convEng = new ConvEng(conv);
+  convEng.addEvent(COMMAND_ABOUT);
+  convEng.process();
+});
+
+app.intent('actions.intent.CANCEL', (conv) => {
+  var convEng = new ConvEng(conv);
+  convEng.addEvent(COMMAND_GOODBYE);
+  convEng.process();
+});
+    
+app.intent('Chips_notification_setup_update', (conv) => {
+  //#TODO: what surface abilities to check for notifications?
+  if (!conv.surface.capabilities.has('actions.capability.SCREEN_OUTPUT')) {
+    var convEng = new ConvEng(conv);
+    conv.addEvent(COMMAND_SAY, `Sorry we can't support notifications on your device yet.`);
+    convEng.process();
+  } else {
+    //The intent Chips_notification_entry_point must be exposed to 'Actions on Google'
+    //and 'Daily Updates' must be enabled in 'User engagement'.
+    //Otherwise an error about not finding the intent is thrown
+    conv.ask(new RegisterUpdate({
+      intent: 'Chips_notification_entry_point',
+      frequency: 'DAILY',
+    }));
+    
+    //Chips_notification_setup_complete will be called via Event actions_intent_REGISTER_UPDATE
+  }
+});
+    
+app.intent('Chips_notification_setup_complete', (conv, params, registered) => {
+  if (registered && registered.status === 'OK') {
+    conv.ask(`Ok, I'll let you know when new chips are available.`);
+  } else {
+    conv.ask(`Ok, I won't give you daily updates.`);
+  }
+});
+    
+app.intent('Chips_notification_entry_point', (conv) => {
+  //How to test this?
+  conv.ask(`Chippy chip chip.`);
+});
+
+    
+app.intent('Test', (conv) => {
+
+  var convEng = new ConvEng(conv);
+  
+  convEng.addEvent(COMMAND_SAY, `Starting test.`);
+  
+  checkPayDay(convEng);
+
+  convEng.addEvent(COMMAND_SAY, `Test complete.`);
+
+  convEng.process();
+});
+ 
+app.fallback((conv) => {
+  var convEng = new ConvEng(conv);
+  
+  const context = conv.contexts.get('insurance_question');
+  if (context !== undefined) {
+    //we are in the middle of asking about insurance - let's ask again
+    convEng.addEvent(COMMAND_PLAY_INSURANCE_ASK_AGAIN);
+  } else {
+    convEng.addEvent(COMMAND_DONT_UNDERSTAND);
+    
+    if (!isPlayingRound(conv)) {
+      convEng.addEvent(COMMAND_ASK_BET);
+    }
+      
+  }
+  
+  convEng.process();
+});
+
+app.catch((conv, error) => {
+  console.error(error);
+  conv.ask('Warning Error Occured: ' + error);
+});
+
+// Set the DialogflowApp object to handle the HTTPS POST request.
+exports.dialogflowFirebaseFulfillment = functions.https.onRequest(app);

@@ -1,0 +1,335 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+<script>
+
+var COMMAND_UNKNOWN = 0;
+var COMMAND_DONT_UNDERSTAND = 1;
+var COMMAND_GENERAL_ERROR = 2;
+var COMMAND_SAY = 10;
+var COMMAND_GREETINGS = 11;
+var COMMAND_COUNT_CHIPS = 12;
+
+var COMMAND_NAME = [];
+COMMAND_NAME[COMMAND_UNKNOWN] = '*UNKNOWN*';
+COMMAND_NAME[COMMAND_SAY] = 'SAY';
+COMMAND_NAME[COMMAND_GREETINGS] = 'GREETING';
+
+
+var createEntry = function(_command, _data) {
+  if (_data === null) {
+    if (typeof _data === 'object') {
+      return _command;
+    } else {
+      return {command:_command};
+    }
+  } else if (typeof _data === 'object') {
+    return Object.assign({}, {command:_command}, _data);
+  } else {
+    return {command:_command, data:_data};
+  }
+};
+
+//oneOf['apple', 'banana']
+var oneOf = function(_options) {
+  var length = _options.length;
+  var pick = Math.floor(Math.random() * length);
+  return _options[pick];
+};
+
+var selectRandom = function(_options) {
+
+  var weight = 0;
+  var length = _options.length;
+  var i;
+  var item;
+  
+  for (i = 0; i < length; i++) {
+    item = _options[i];
+    if (typeof item === 'object') {
+      if (item.weight !== undefined) {
+        weight += item.weight;
+      } else {
+        weight += 1;
+      }
+    } else {
+      weight += 1;
+    }
+  }
+  
+  //Now pick a random item
+  //#HACK - we remove a bit from the end to prevent any chance of not picking something
+  var pick = Math.random() * weight - 0.00001;
+  for (i = 0; i < length; i++) {
+    item = _options[i];
+    if (typeof item === 'object') {
+      if (item.weight !== undefined) {
+        pick -= item.weight;
+        if (pick <= 0) {
+          return item.value;
+        }
+      }
+    } else {
+      pick -= 1;
+      if (pick <= 0) {
+        return item;
+      }
+    }
+  }
+  
+  return null;
+};
+
+var selectSequential = function(_state, _options, _clamp, _step) {
+
+  var weight = 0;
+  var length = _options.length;
+  var i;
+  var item;
+  
+  for (i = 0; i < length; i++) {
+    item = _options[i];
+    if (typeof item === 'object') {
+      if (item.weight !== undefined) {
+        weight += item.weight;
+      } else {
+        weight += 1;
+      }
+    } else {
+      weight += 1;
+    }
+  }
+  
+  if (_step === undefined) {
+    _step = 1;
+  }
+  _step = Math.floor(Math.random() * _step) + 1;
+  
+  var pick = _state.last + _step;
+  //#WE remove a bit to prevent problems
+  if (pick > weight) {
+    if (_clamp) {
+      pick = weight;
+    } else {
+      pick -= weight;
+      //Handle any potential errors
+      if ((pick < 0) || (pick > weight)) {
+        pick = 0;
+      }
+    }
+  }
+  _state.last = pick;
+  
+  for (i = 0; i < length; i++) {
+    item = _options[i];
+    if (typeof item === 'object') {
+      if (item.weight !== undefined) {
+        pick -= item.weight;
+        if (pick <= 0) {
+          return item.value;
+        }
+      }
+    } else {
+      pick -= 1;
+      if (pick <= 0) {
+        return item;
+      }
+    }
+  }
+  
+  return null;
+};
+
+//#TODO
+//select = function(_context, _rules) {
+//  var name = _rules.name;
+//  var style = _rules.style;
+//}
+  
+  
+  
+function ConvEng() {
+  this.commands = [];
+  
+  this.addEvent = function(_command, _data) {
+    var entry = createEntry(_command, _data);
+    this.commands.push(entry);
+  };
+  
+  this.dump = function() {
+    console.log('Dump (' + this.commands.length + '): ');
+    
+    var length = this.commands.length;
+    var command;
+    
+    for (var i = 0; i < length; i++) {
+      
+      command = this.commands[i];
+    
+      var id = command.command;
+      var idName = COMMAND_NAME[id.toString()];
+      
+      if (idName === undefined) {
+          idName = '';
+      }
+      
+      console.log('%s -> %o', idName, command);
+    }
+      
+    console.log('----');
+  };
+  
+  this.render = function(conv) {
+
+    var response = '';
+    
+    var length = this.commands.length;
+    var command;
+  
+    for (var i = 0; i < length; i++) {
+      
+      command = this.commands[i];
+      if (command.command == COMMAND_SAY) {
+
+        if (i > 0) {
+          response += ' ';
+        }
+        
+        response += command.data;
+      }
+      
+    }
+    
+    conv.ask(response);
+  };
+  
+  this.reset = function() {
+    this.commands = [];
+  };
+
+  this.compile = function() {
+  
+    var nextCommands = [];
+    var response;
+    
+    var length = this.commands.length;
+    var command;
+    
+    for (var i = 0; i < length; i++) {
+      
+      command = this.commands[i];
+      
+      switch (command.command) {
+        default: break;
+        
+        case COMMAND_SAY: {
+          //If this was used we let this pass through
+          nextCommands.push(command);
+          break;
+        }
+        
+        case COMMAND_DONT_UNDERSTAND: {
+          nextCommands.push(createEntry(COMMAND_SAY, "Sorry, I don't understand. Can you say that again?"));
+          break;
+        }
+        
+        case COMMAND_GENERAL_ERROR: {
+          nextCommands.push(createEntry(COMMAND_SAY, 'Danger Will Robinson!'));
+          break;
+        }
+
+        case COMMAND_GREETINGS: {
+          nextCommands.push(createEntry(COMMAND_SAY, "Welcome. I'm Carlos."));
+          break;
+        }
+    
+        case COMMAND_COUNT_CHIPS: {
+        
+          response = selectRandom([
+                      'You have ' + command.data + ' left.',
+                      'Looks like you have ' + command.data + ' chips left.',
+                      {
+                        weight: command.data > 40 ? 0.1 : 0,
+                        data: "Let's see..." + (command.data - 9) + "..." + (command.data - 5) + "..." + command.data + ".  So " + command.data + " chips"
+                      },
+                      {
+                        weight: (command.data > 100) ? 1 : 0,
+                        data: "Look's like you're doing well.  You have about " + command.data + " chips."
+                      }
+                      ]);
+                      
+          nextCommands.push(createEntry(COMMAND_SAY, response));
+          break;
+        }
+        
+      }
+    
+    }
+    
+    this.commands = nextCommands;
+  
+  };
+  
+  this.optimize = function() {
+  };
+  
+}
+
+var globalCounter = 0;
+
+function FakeConv() {
+  this.ask = function(response) {
+    console.log("FakeConv: " + response);
+  }
+}
+
+var testState = {
+  last: 0
+};
+
+function doit() {
+
+  var hand = [1, 2, 3];
+  console.log("Array: %o", hand);
+  var entry = createEntry(COMMAND_UNKNOWN, hand);
+  console.log("Entry: %o", entry);
+  
+
+  var conv = new FakeConv();
+
+  var convEng = new ConvEng();
+  
+  convEng.addEvent(COMMAND_SAY, 'Test Running.');
+  convEng.addEvent(COMMAND_GREETINGS);
+  convEng.dump();
+  convEng.optimize();
+  convEng.dump();
+  convEng.compile();
+  convEng.dump();
+  convEng.render(conv);
+  convEng.dump();
+  
+  var oo = '';
+  oo = selectSequential(testState, ['A', 'B', `On move ${globalCounter}`, { weight: 3, value: 'D'}, 'E'], false, 2);
+  document.getElementById("demo").innerHTML = "Paragraph changed. " + globalCounter + ' ' + oo;
+  globalCounter = globalCounter + 1;
+}
+
+
+
+
+</script>
+</head>
+
+<body>
+
+<p id="demo">Hello</p>
+<button type="button" onclick="doit()">Try it</button>
+
+</body>
+</html> 
+
+
+
+
